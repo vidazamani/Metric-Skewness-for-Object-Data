@@ -1,0 +1,34 @@
+# Load necessary libraries
+library(ggplot2)
+library(VGAM)  # For the Pareto distribution
+
+# Parameters for the distributions
+alpha <- 0.5  # Shape parameter for the Pareto distribution
+lambda_param <- 1.0  # Rate parameter for the Exponential distribution
+threshold <- 0  # Threshold to switch between the distributions
+
+# Generate values for the left (heavy-tailed) side using the Pareto distribution
+x_left <- seq(-5, threshold, length.out = 1000)
+y_left <- dpareto(-x_left + 1, shape = alpha)
+
+# Generate values for the right (long-tailed) side using the Exponential distribution
+x_right <- seq(threshold, 10, length.out = 1000)
+y_right <- dexp(x_right - threshold, rate = lambda_param)
+
+# Combine the two distributions
+x_combined <- c(x_left, x_right)
+y_combined <- c(y_left, y_right)
+
+# Normalize the combined PDF so the total area sums to 1
+y_combined <- y_combined / sum(y_combined * diff(x_combined)[1])
+
+# Create a data frame for ggplot2
+data <- data.frame(x = x_combined, y = y_combined)
+
+# Plot the combined distribution using ggplot2
+ggplot(data, aes(x = x, y = y)) +
+  geom_line(color = "blue") +
+  ggtitle("Distribution with Heavy Left Tail and Long Right Tail") +
+  xlab("x") +
+  ylab("Probability Density") +
+  theme_minimal()
