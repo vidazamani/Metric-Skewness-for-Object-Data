@@ -1,0 +1,14 @@
+# install.packages("MVN")
+library(MVN)
+
+
+data <- matrix(rnorm(100*3), ncol=3)
+
+# Perform Mardia's test for skewness and kurtosis
+result <- mvn(data, mvnTest = "mardia")
+print(result)
+
+
+setosa = iris[1:50, 1:4] # Iris data only for setosa and four variables
+result = mvn(setosa, mvnTest = "mardia")
+result
