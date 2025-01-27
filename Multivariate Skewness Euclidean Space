@@ -1,3 +1,4 @@
+#################### Mardia ###############
 # install.packages("MVN")
 library(MVN)
 
@@ -12,3 +13,10 @@ print(result)
 setosa = iris[1:50, 1:4] # Iris data only for setosa and four variables
 result = mvn(setosa, mvnTest = "mardia")
 result
+
+
+################### Khattree-Bahuguna's multivairate skewness
+# Compute Khattree-Bahuguna's multivairate skewness
+
+data(OlymWomen)
+kbMvtSkew(OlymWomen[, c("m800","m1500","m3000","marathon")])
