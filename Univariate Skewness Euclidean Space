@@ -23,3 +23,13 @@ medcouple_value <- mc(skewed_data)
 # Print the medcouple value
 print(medcouple_value)
 
+############### Khattree-Bahuguna's univariate skewness #################
+# Compute Khattree-Bahuguna's univariate skewness
+
+set.seed(2019)
+x <- rnorm(1000) # Normal Distribution
+kbSkew(x)
+
+set.seed(2019)
+y <- rlnorm(1000, meanlog = 1, sdlog = 0.25) # Log-normal Distribution
+kbSkew(y)
