@@ -1,0 +1,25 @@
+########## Medcouple ###################
+# install.packages("robustbase")
+library(robustbase)
+
+
+# Example data
+data <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+
+# Compute the medcouple
+result <- mc(data)
+
+# Print the result
+print(result)
+
+
+
+# Skewed data
+skewed_data <- c(1, 2, 2, 3, 3, 3, 4, 4, 5, 6, 100)
+
+# Compute the medcouple
+medcouple_value <- mc(skewed_data)
+
+# Print the medcouple value
+print(medcouple_value)
+
