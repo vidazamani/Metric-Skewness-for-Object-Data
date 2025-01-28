@@ -1,0 +1,79 @@
+# Load necessary libraries
+library(CovTools) 
+library(lsbclust)
+library(shapes)
+
+
+
+# Step 1: Generate n random SPD matrices
+
+
+
+generate_matrices <- function(n, dim) {
+  sample_covs <- samplecovs(n,dim) 
+  return(sample_covs) # A 3D array of size (dim x dim x n)
+}
+
+
+
+# Step 2 & 4: Compute average squared distance using distcov
+average_squared_distance <- function(matrices) {
+  fixed_matrix <- matrices[, , 1] # Choose the first matrix as the fixed one
+  n <- dim(matrices)[3] # Number of matrices
+  
+  # Compute squared distances between the fixed matrix and all other matrices
+  distances <- sapply(2:n, function(i) distcov(fixed_matrix,
+                                               matrices[, , i])^2)
+  avg_distance <- mean(distances)
+  return(avg_distance)
+}
+
+
+
+# Step 3: Invert all generated matrices
+invert_matrices <- function(matrices) {
+  n <- dim(matrices)[3] # Number of matrices
+  dim <- dim(matrices)[1] # Dimension of each matrix
+  inverted_matrices <- array(0, dim = c(dim, dim, n)) # Create an empty 3D array
+  for (i in 1:n) {
+    inverted_matrices[, , i] <- solve(matrices[, , i]) # Invert each matrix
+  }
+  return(inverted_matrices)
+}
+
+
+
+# Main function
+main <- function(n, dim) {
+  # Step 1: Generate sample covariance matrices
+  matrices <- generate_matrices(n, dim)
+  
+  # Step 2: Compute average squared distance for original matrices
+  avg_dist_original <- average_squared_distance(matrices)
+  
+  # Step 3: Invert the matrices
+  inverted_matrices <- invert_matrices(matrices)
+  
+  # Step 4: Compute average squared distance for inverted matrices
+  avg_dist_inverted <- average_squared_distance(inverted_matrices)
+  
+  # Step 5: Compute the final average squared distance
+  final_avg_distance <- (avg_dist_original - avg_dist_inverted)^2 / n
+  
+  # Return results
+  return(list(
+    avg_dist_original = avg_dist_original,
+    avg_dist_inverted = avg_dist_inverted,
+    final_avg_distance = final_avg_distance
+  ))
+}
+
+# Example usage
+set.seed(123) 
+n <- 10  # Number of matrices
+dim <- 3 
+
+result <- main(n, dim)
+
+# Print results
+print(result)
