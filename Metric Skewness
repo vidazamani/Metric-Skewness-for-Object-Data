@@ -1,4 +1,4 @@
-# Load necessary libraries
+# Load necessary library
 library(CovTools) 
 library(lsbclust)
 library(shapes)
@@ -10,22 +10,18 @@ library(shapes)
 
 
 generate_matrices <- function(n, dim) {
-  sample_covs <- samplecovs(n,dim) 
+  sample_covs <- samplecovs(n,dim) # Compute sample covariance matrices
   return(sample_covs) # A 3D array of size (dim x dim x n)
 }
 
 
 
-# Step 2 & 4: Compute average squared distance using distcov
-average_squared_distance <- function(matrices) {
-  fixed_matrix <- matrices[, , 1] # Choose the first matrix as the fixed one
-  n <- dim(matrices)[3] # Number of matrices
-  
-  # Compute squared distances between the fixed matrix and all other matrices
-  distances <- sapply(2:n, function(i) distcov(fixed_matrix,
-                                               matrices[, , i])^2)
-  avg_distance <- mean(distances)
-  return(avg_distance)
+# Step 2: Compute average squared distance using distcov
+average_squared_distances <- function(matrices) {
+  n <- dim(matrices)[3]
+  sapply(1:n, function(i) {
+    mean(sapply(1:n, function(j) if (i != j) distcov(matrices[, , i], matrices[, , j])^2 else NA), na.rm = TRUE)
+  })
 }
 
 
@@ -41,6 +37,14 @@ invert_matrices <- function(matrices) {
   return(inverted_matrices)
 }
 
+# Step 4: Compute average squared distance for inverted matrices
+average_squared_distances_inverted <- function(matrices) {
+  iverted_matrices <- invert_matrices(matrices)
+  n <- dim(matrices)[3]
+  sapply(1:n, function(i) {
+    mean(sapply(1:n, function(j) if (i != j) distcov(matrices[, , i], iverted_matrices[, , j])^2 else NA), na.rm = TRUE)
+  })
+}
 
 
 # Main function
@@ -49,16 +53,14 @@ main <- function(n, dim) {
   matrices <- generate_matrices(n, dim)
   
   # Step 2: Compute average squared distance for original matrices
-  avg_dist_original <- average_squared_distance(matrices)
+  avg_dist_original <- average_squared_distances(matrices)
   
-  # Step 3: Invert the matrices
-  inverted_matrices <- invert_matrices(matrices)
   
-  # Step 4: Compute average squared distance for inverted matrices
-  avg_dist_inverted <- average_squared_distance(inverted_matrices)
+  # Step 3: Compute average squared distance for inverted matrices
+  avg_dist_inverted <- average_squared_distances_inverted(matrices)
   
-  # Step 5: Compute the final average squared distance
-  final_avg_distance <- (avg_dist_original - avg_dist_inverted)^2 / n
+  # Step 4: Compute the final average squared distance
+  final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)
   
   # Return results
   return(list(
