@@ -2,17 +2,44 @@
 library(CovTools) 
 library(lsbclust)
 library(shapes)
+library(ICtest)
 
 
 
-# Step 1: Generate n random SPD matrices
+# Step 1: Generate n random SPD (Symmetric Positive Definite) matrices
 
-
+##############################################################################
+##For visualization purpose, samplecovs generates a 3d array of stacked
+##sample covariances where - in 3rd dimension,
+##the first half are sample covariances of samples generated
+##independently from normal distribution with identity covariance,
+##where the latter half consists of samples covariances
+##from dense random population covariance.
 
 generate_matrices <- function(n, dim) {
   sample_covs <- samplecovs(n,dim) # Compute sample covariance matrices
   return(sample_covs) # A 3D array of size (dim x dim x n)
 }
+
+#############################################################################
+### Another way to generate data (corr and Cov)
+
+generate_matrices <- function(n,dim) {
+  
+  replicate(n, {
+    
+    U <- rorth(dim)
+    D <- diag(exp(rnorm(dim)))
+    S <- U%*%D%*%t(U) ### Covariance
+    
+    # diagS <- diag(S)
+    # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS)) ## Corr
+    
+  })
+  
+}
+
+
 
 
 
@@ -20,7 +47,10 @@ generate_matrices <- function(n, dim) {
 average_squared_distances <- function(matrices) {
   n <- dim(matrices)[3]
   sapply(1:n, function(i) {
-    mean(sapply(1:n, function(j) if (i != j) distcov(matrices[, , i], matrices[, , j])^2 else NA), na.rm = TRUE)
+         mean(sapply(1:n,
+         function(j) if (i != j) distcov(matrices[, , i],
+                                         matrices[, , j])^2 else NA),
+                                         na.rm = TRUE)
   })
 }
 
@@ -42,7 +72,7 @@ average_squared_distances_inverted <- function(matrices) {
   iverted_matrices <- invert_matrices(matrices)
   n <- dim(matrices)[3]
   sapply(1:n, function(i) {
-    mean(sapply(1:n, function(j) if (i != j) distcov(matrices[, , i], iverted_matrices[, , j])^2 else NA), na.rm = TRUE)
+    mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j])^2))
   })
 }
 
