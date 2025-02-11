@@ -8,7 +8,7 @@ library(ICtest)
 
 # Step 1: Generate n random SPD (Symmetric Positive Definite) matrices
 
-##############################################################################
+
 ##For visualization purpose, samplecovs generates a 3d array of stacked
 ##sample covariances where - in 3rd dimension,
 ##the first half are sample covariances of samples generated
@@ -21,19 +21,19 @@ generate_matrices <- function(n, dim) {
   return(sample_covs) # A 3D array of size (dim x dim x n)
 }
 
-#############################################################################
+
 ### Another way to generate data (corr and Cov)
 
-generate_matrices <- function(n,dim) {
+generate_matrices <- function(n,dim,mu,sig) {
   
   replicate(n, {
     
     U <- rorth(dim)
-    D <- diag(exp(rnorm(dim)))
-    S <- U%*%D%*%t(U) ### Covariance
+    D <- diag(exp(rnorm(dim,mu,sig)))
+    S <- U%*%D%*%t(U)
     
     # diagS <- diag(S)
-    # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS)) ## Corr
+    # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS))
     
   })
   
@@ -49,8 +49,8 @@ average_squared_distances <- function(matrices) {
   sapply(1:n, function(i) {
          mean(sapply(1:n,
          function(j) if (i != j) distcov(matrices[, , i],
-                                         matrices[, , j])^2 else NA),
-                                         na.rm = TRUE)
+                                         matrices[, , j],
+                                         method ='Euclidean')^2 else 0))
   })
 }
 
@@ -72,15 +72,16 @@ average_squared_distances_inverted <- function(matrices) {
   iverted_matrices <- invert_matrices(matrices)
   n <- dim(matrices)[3]
   sapply(1:n, function(i) {
-    mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j])^2))
+    mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j],
+                                         method ='Euclidean')^2))
   })
 }
 
 
 # Main function
-main <- function(n, dim) {
+main <- function(n, dim,mu,sig) {
   # Step 1: Generate sample covariance matrices
-  matrices <- generate_matrices(n, dim)
+  matrices <- generate_matrices(n, dim,mu,sig)
   
   # Step 2: Compute average squared distance for original matrices
   avg_dist_original <- average_squared_distances(matrices)
@@ -90,7 +91,7 @@ main <- function(n, dim) {
   avg_dist_inverted <- average_squared_distances_inverted(matrices)
   
   # Step 4: Compute the final average squared distance
-  final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)
+  final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)/mean(avg_dist_original^2)
   
   # Return results
   return(list(
@@ -102,10 +103,20 @@ main <- function(n, dim) {
 
 # Example usage
 set.seed(123) 
-n <- 10  # Number of matrices
+n <- 200  # Number of matrices
+## or n <- c(20,50,200,500)
 dim <- 3 
+mu <- 2
+sig <- 1
 
-result <- main(n, dim)
+
+
+result <- c()
+for (k in 1:length(n)) {
+  
+  result[k] <- main(n[k], dim,mu,sig)$final_avg_distance
+}
 
 # Print results
 print(result)
+
