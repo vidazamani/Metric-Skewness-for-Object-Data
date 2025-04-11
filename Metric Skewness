@@ -1,8 +1,12 @@
-# Load necessary library
+# Load necessary libraries
 library(CovTools) 
 library(lsbclust)
 library(shapes)
 library(ICtest)
+library(ggplot2)
+library(dplyr)
+library(parallel)
+library(purrr)
 
 
 
@@ -16,13 +20,16 @@ library(ICtest)
 ##where the latter half consists of samples covariances
 ##from dense random population covariance.
 
-generate_matrices <- function(n, dim) {
-  sample_covs <- samplecovs(n,dim) # Compute sample covariance matrices
-  return(sample_covs) # A 3D array of size (dim x dim x n)
-}
+
+### This is one way 
+
+# generate_matrices <- function(n, dim) {
+#   sample_covs <- samplecovs(n,dim) # Compute sample covariance matrices
+#   return(sample_covs) # A 3D array of size (dim x dim x n)
+# }
 
 
-### Another way to generate data (corr and Cov)
+### This is another way to generate data (corr and Cov)
 
 generate_matrices <- function(n,dim,mu,sig) {
   
@@ -32,6 +39,7 @@ generate_matrices <- function(n,dim,mu,sig) {
     D <- diag(exp(rnorm(dim,mu,sig)))
     S <- U%*%D%*%t(U)
     
+    ## if you want to generate corr matrices, then run the code lines below
     # diagS <- diag(S)
     # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS))
     
@@ -42,15 +50,14 @@ generate_matrices <- function(n,dim,mu,sig) {
 
 
 
-
 # Step 2: Compute average squared distance using distcov
 average_squared_distances <- function(matrices) {
   n <- dim(matrices)[3]
   sapply(1:n, function(i) {
-         mean(sapply(1:n,
-         function(j) if (i != j) distcov(matrices[, , i],
-                                         matrices[, , j],
-                                         method ='Euclidean')^2 else 0))
+    mean(sapply(1:n,
+                function(j) if (i != j) distcov(matrices[, , i],
+                                                matrices[, , j],
+                                                method ='LogEuclidean')^2 else 0))
   })
 }
 
@@ -73,9 +80,10 @@ average_squared_distances_inverted <- function(matrices) {
   n <- dim(matrices)[3]
   sapply(1:n, function(i) {
     mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j],
-                                         method ='Euclidean')^2))
+                                         method ='LogEuclidean')^2))
   })
 }
+
 
 
 # Main function
@@ -97,26 +105,105 @@ main <- function(n, dim,mu,sig) {
   return(list(
     avg_dist_original = avg_dist_original,
     avg_dist_inverted = avg_dist_inverted,
-    final_avg_distance = final_avg_distance
+    Metric_skewness = final_avg_distance
   ))
 }
 
 # Example usage
 set.seed(123) 
-n <- 200  # Number of matrices
-## or n <- c(20,50,200,500)
-dim <- 3 
-mu <- 2
-sig <- 1
+n <- c(50,100)   # Number of matrices
+dim <- 2 
+mu <- c(-3,-2,-1,0,1,2,3)
+sig <- c(0.5,1,2)
+
+
+# main(5,dim,mu,sig)
+
+
+par_grid <- expand.grid(sample_size = n,
+                        matrix_dimension = dim,
+                        mean = mu,
+                        sig = sig)
+
+
+par_n <- nrow(par_grid)
 
 
 
-result <- c()
-for (k in 1:length(n)) {
+
+
+iter = 10
+b_all <- matrix(0,length(n)*length(mu)*length(sig),iter)
+
+
+
+cl <- makeCluster(4)
+clusterExport(cl, ls(), envir = environment())
+clusterExport(cl, c("rorth","abind", "CovDist",
+                    "distcov"), envir = environment())
+
+
+clusterEvalQ(cl, set.seed(2222))
+set.seed(1111)
+seed_vec <- sample(1:100000, iter)
+
+
+for (j in 1:iter) {
   
-  result[k] <- main(n[k], dim,mu,sig)$final_avg_distance
+  set.seed(seed_vec[j])
+  
+  skews <- parSapply(cl, 1:par_n, function(i) main(par_grid$sample_size[i],
+                                                  par_grid$matrix_dimension[i],
+                                                  par_grid$mean[i],
+                                                  par_grid$sig[i])$Metric_skewness)
+  
+  
+  b_all[,j] <- skews
+  
+  
 }
 
-# Print results
-print(result)
+
+stopCluster(cl)
+
+
+
+
+data <- data.frame(par_grid,b_all)
+
+### To just obtain a dataset 
+### which has an average of skewness measre over iterations
+data1 <- data.frame(data,avg_skew = apply(data[c(5,6)], 1, mean))
+
+
+
+
+
+
+# New facet label names for matrix dimension variable
+mtd.labs <- c("n = 50", 'n = 100')
+names(mtd.labs) <- c(50,100)
+
+# New facet label names for sigma variable
+otl.labs <- c("sigma = 0.5", "sigma = 1", 'sigma = 2')
+names(otl.labs) <- c('0.5',"1", "2")
+
+
+data4 <- data1 %>% group_by(sample_size,sig,mean) %>% 
+  summarise(avg_skew = mean(avg_skew))
+
+
+ggplot()+ 
+  facet_grid(sig~sample_size,
+             labeller = labeller(sample_size = mtd.labs,
+                                 sig = otl.labs))+
+  geom_line(data = data4, aes(x = mean,
+                           y = log(avg_skew)),
+            linewidth = 1)
+
+
+
+
+
+
 
