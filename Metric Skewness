@@ -130,9 +130,9 @@ par_n <- nrow(par_grid)
 
 
 
+start_time <- Sys.time()
 
-
-iter = 10
+iter = 1000
 b_all <- matrix(0,length(n)*length(mu)*length(sig),iter)
 
 
@@ -153,9 +153,9 @@ for (j in 1:iter) {
   set.seed(seed_vec[j])
   
   skews <- parSapply(cl, 1:par_n, function(i) main(par_grid$sample_size[i],
-                                                  par_grid$matrix_dimension[i],
-                                                  par_grid$mean[i],
-                                                  par_grid$sig[i])$Metric_skewness)
+                                                   par_grid$matrix_dimension[i],
+                                                   par_grid$mean[i],
+                                                   par_grid$sig[i])$Metric_skewness)
   
   
   b_all[,j] <- skews
@@ -167,7 +167,9 @@ for (j in 1:iter) {
 stopCluster(cl)
 
 
+endtime <- Sys.time()
 
+howlong <- endtime - start_time
 
 data <- data.frame(par_grid,b_all)
 
@@ -198,7 +200,7 @@ ggplot()+
              labeller = labeller(sample_size = mtd.labs,
                                  sig = otl.labs))+
   geom_line(data = data4, aes(x = mean,
-                           y = log(avg_skew)),
+                              y = log(avg_skew)),
             linewidth = 1)
 
 
