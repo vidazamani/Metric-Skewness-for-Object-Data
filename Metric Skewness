@@ -113,7 +113,9 @@ main <- function(n, dim,mu,sig) {
 set.seed(123) 
 n <- c(50,100)   # Number of matrices
 dim <- 2 
-mu <- c(-3,-2,-1,0,1,2,3)
+mu <- c(-12,-9,-6,-3,0,3,6,9,12)
+#mu <- seq(-12,12,0.2)
+
 sig <- c(0.5,1,2)
 
 
@@ -196,16 +198,36 @@ data4 <- data1 %>% group_by(sample_size,sig,mean) %>%
 
 
 ggplot()+ 
-  facet_grid(sig~sample_size,
+  facet_grid(sig~.,
              labeller = labeller(sample_size = mtd.labs,
                                  sig = otl.labs))+
   geom_line(data = data4, aes(x = mean,
-                              y = log(avg_skew)),
+                              y = log(avg_skew),
+                              color = factor(sample_size)),
             linewidth = 1)
 
 
+ggplot()+ 
+  facet_grid(sig~.,
+             labeller = labeller(sample_size = mtd.labs,
+                                 sig = otl.labs))+
+  geom_line(data = data4, aes(x = mean,
+                              y = avg_skew,
+                              color = factor(sample_size)),
+            linewidth = 1)
 
 
-
-
+ggplot()+ 
+  geom_line(data = data4, aes(x = mean,
+                              y = log(avg_skew),
+                              color = factor(sample_size),
+                              linetype = factor(sig)),
+            linewidth = 1)+ 
+  theme_light()+
+  labs(
+    x = expression(mu) ,       
+    y = "Averaged Skewness",    
+    color = "Smaple Size",
+    linetype = expression(sigma)
+  )
 
