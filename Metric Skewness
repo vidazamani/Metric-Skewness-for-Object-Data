@@ -114,7 +114,7 @@ set.seed(123)
 n <- c(50,100)   # Number of matrices
 dim <- 2 
 mu <- c(-12,-9,-6,-3,0,3,6,9,12)
-#mu <- seq(-12,12,0.2)
+mu <- seq(-12,12,0.2)
 
 sig <- c(0.5,1,2)
 
@@ -182,6 +182,12 @@ data1 <- data.frame(data,avg_skew = apply(data[c(5,6)], 1, mean))
 
 
 
+#################### Visualization ##############################
+
+pdf(file = 
+      "C:/Users/vizama/Documents/2nd paper/pics/skewnessmatrix.pdf",  
+    width = 15, # The width of the plot in inches
+    height = 7) # The height of the plot in inches
 
 
 # New facet label names for matrix dimension variable
@@ -226,8 +232,10 @@ ggplot()+
   theme_light()+
   labs(
     x = expression(mu) ,       
-    y = "Averaged Skewness",    
+    y = "Log of Averaged Skewness",    
     color = "Smaple Size",
     linetype = expression(sigma)
   )
 
+
+dev.off()
