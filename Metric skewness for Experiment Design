@@ -1,0 +1,379 @@
+## Libraries 
+library(dplyr)
+Sys.setenv(RGL_USE_NULL=TRUE)
+library(CovTools)
+library(ICtest)
+library(ggplot2)
+library(fda)
+
+
+
+################ Import data ######################
+### There are 102 patients all together 
+
+setwd('/Users/vizama/Documents/Papers/2nd paper/Dataset/PET data')
+
+
+# vector of organ names
+organNames <- c('spleen','kidney_right','kidney_left','liver','pancreas',
+                'LUL','LLL','RUL','RML','RLL',
+                'colon','urinary_bladder','heart','aorta','brain')
+
+# get all csv files
+all_files <- list.files()
+
+
+
+# helper function to read and add organ Names
+read_with_organs <- function(file) {
+  df <- read.csv(file)
+  df <- df[, -1]                          # remove first column
+  df <- cbind(organ = organNames, df)     # add organ column
+  return(df)
+}
+
+
+
+# split by category
+rest_files   <- grep("rest", all_files, value = TRUE)
+stress_files <- grep("stress", all_files, value = TRUE)
+
+
+
+######################################################################
+#### In this part, a data frame per each patient is created 
+
+
+rest_data   <- lapply(rest_files, read_with_organs)
+stress_data <- lapply(stress_files, read_with_organs)
+
+
+
+#######################################################################
+### In this part, a data frame for all patients per each organ is created
+
+# Combine all patients into one long data frame with patient ID
+rest_df <- bind_rows(rest_data, .id = "patient")
+stress_df <- bind_rows(stress_data, .id = "patient")
+
+
+# Function to split by organ
+split_by_organ <- function(df) {
+  split(df, df$organ)   
+}
+
+rest_organs   <- split_by_organ(rest_df)
+stress_organs <- split_by_organ(stress_df)
+
+# organ <- 'heart'
+
+make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
+  # Extract data for one organ
+  data_rest   <- t((rest_organs[[organ]][, -c(1,2)]))
+  data_stress <- t((stress_organs[[organ]][, -c(1,2)]))
+  
+  #### Both rest and stress
+  data_rs <- cbind(data_rest,data_stress)
+  
+  ################################## FDA #######################
+  
+
+  ft_rest <- Data2fd(
+    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+    data_rest, my_basis
+  )
+  
+  ft_stress <- Data2fd(
+    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+    data_stress, my_basis
+  )
+  
+  ftt <- Data2fd(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+                   62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+                 data_rs, my_basis)
+  
+  ##### Smoothing 
+  
+  ft_s_rest <- smooth.fd(ft_rest, fdPar(ft_rest, 2, 1e4))
+  ft_s_stress <- smooth.fd(ft_stress, fdPar(ft_stress, 2, 1e4))
+  ftt_s <- smooth.fd(ftt, fdPar(ft_stress, 2, 1e4))
+  
+  #### Get coefficients
+  #### Matrix with nbasis*npatients
+  
+  # coef_rest   <- coef(ft_rest)
+  # coef_stress <- coef(ft_stress)
+  
+  # coef_rest   <- coef(ft_s_rest)
+  # coef_stress <- coef(ft_s_stress)
+  
+  
+  coef_ftt <- coef(ftt_s)
+  coef_rest_2 <- coef_ftt[,1:102]
+  coef_stress_2 <- coef_ftt[,103:204]
+  
+  nbasis    <- nrow(coef_rest_2)
+  npatients <- ncol(coef_rest_2)
+  
+  # Build patient_array
+  patient_array <- array(NA, dim = c(nbasis, 2, npatients),
+                         dimnames = list(
+                           paste0("basis", 1:nbasis),
+                           c("rest", "stress"),
+                           paste0("patient", 1:npatients)
+                         ))
+  
+  for (i in 1:npatients) {
+    patient_array[, , i] <- cbind(
+      rest   = coef_rest_2[, i],
+      stress = coef_stress_2[, i]
+    )
+  }
+  
+  return(patient_array)
+}
+
+
+
+############## Build arrays for all organs
+
+
+#my_basis <- create.fourier.basis(c(0, 265), 6)
+
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+### organ_array is a list of 15 elements. 
+### Each element is a 3D array 
+### Each element: (nbasis x treatment x patient) array for that organ
+
+organ_arrays <- lapply(organNames, function(org) {
+  make_patient_array(org, rest_organs, stress_organs, my_basis)
+})
+names(organ_arrays) <- organNames
+
+
+
+
+Permutation_test <- function(matrices, iter, seed){
+  
+  
+  set.seed(seed)
+  
+  # Average squared distances between all patient matrices
+  average_squared_distances <- function(matrices) {
+    n <- dim(matrices)[3]
+    sapply(1:n, function(i) {
+      mean(sapply(1:n,
+                  function(j) if (i != j) norm(matrices[, , i]-
+                                                 matrices[, , j],
+                                               type ='F')^2 else 0))
+    })
+  }
+  
+  
+  # Average squared distances when rest/stress are swapped 
+  average_squared_distances_inverted <- function(matrices) {
+    n <- nrow(matrices)
+    inverted_matrices <- matrices[, c(2, 1), ]
+    n <- dim(matrices)[3]
+    sapply(1:n, function(i) {
+      mean(sapply(1:n, function(j) norm(matrices[, , i]- 
+                                          inverted_matrices[, , j],
+                                        type ='F')^2))
+    })
+  }
+  
+  
+  # Compute the test statistic (Metric Skewness)
+  compute_stat <- function(matrices) {
+    avg_dist_orig <- average_squared_distances(matrices)
+    avg_dist_inv <- average_squared_distances_inverted(matrices)
+    
+    mean((avg_dist_orig - avg_dist_inv)^2) / mean(avg_dist_orig^2)
+  }
+  
+  
+  P_swap <- matrix(c(0,1,
+                     1,0), nrow = 2)
+  
+  
+  
+  nbasis <- dim(matrices)[1]
+  npatients <- dim(matrices)[3]
+  
+  perm_stats <- numeric(iter)
+  
+  for (b in 1:iter) {
+    perm_array <- matrices
+    
+    for (i in 1:npatients) {
+      # randomly decide whether to swap rest/stress for this patient
+      if (sample(c(TRUE, FALSE), 1)) {
+        perm_array[, , i] <- perm_array[, , i] %*% P_swap
+      }
+    }
+    
+    # Compute your test statistic on permuted array
+    perm_stats[b] <- compute_stat(perm_array)  
+  }
+  
+  obs_stat <- compute_stat(matrices)
+  p_val <- mean(perm_stats >= obs_stat)
+  
+  
+  result <- list(perm_stats,obs_stat, p_val)
+  names(result) <- c("perm_stats", "observed", "p_value")
+  result
+}
+
+
+
+
+
+
+organ_results <- lapply(organ_arrays, Permutation_test,iter = 100, seed = 1111)
+
+summary_table <- data.frame(
+  organ   = names(organ_results),
+  obs_stat = sapply(organ_results, function(x) x$observed),
+  p_value  = sapply(organ_results, function(x) x$p_value)
+)
+print(summary_table)
+
+# Add a logical column for significance
+summary_table$significant <- summary_table$p_value < 0.05
+
+
+
+
+ggplot(summary_table, aes(x = organ, y = obs_stat, fill = significant)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
+  labs(
+    title = "Rest vs Stress Differences Across Organs",
+    y = "Observed Test Statistic (Metric Skewness)",
+    fill = "Significant (p < 0.05)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+######################### One organ only ##########################
+test_result <- Permutation_test(organ_arrays$spleen,2,2222)
+
+############ Visualization 
+
+perm_stats <- test_result$perm_stats
+obs_stat <- test_result$observed
+
+hist(perm_stats, breaks = 2,
+     main = "Permutation Test",
+     xlab = "Test Statistic (Average Squared Distance)",
+     col = "lightblue", border = "white")
+
+# Add observed statistic
+abline(v = obs_stat, col = "red", lwd = 2)
+
+# Optional: add legend
+legend("topright", legend = c("Observed"), col = "red", lwd = 2)
+
+
+
+
+# Create a data frame for plotting
+plot_df <- data.frame(test_stat = perm_stats)
+
+ggplot(plot_df, aes(x = test_stat)) +
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue", color = "white") +
+  geom_density(color = "blue", size = 1) +
+  geom_vline(xintercept = obs_stat, color = "red", linetype = "dashed", size = 1.2) +
+  annotate("text", x = obs_stat, y = max(density(perm_stats)$y)*0.9, 
+           label = paste0("Obs = ", round(obs_stat, 5)), color = "red", hjust = -0.1) +
+  annotate("text", x = mean(perm_stats), y = max(density(perm_stats)$y)*0.8, 
+           label = paste0("p = ", signif(p_val, 3)), color = "black") +
+  labs(title = "Permutation Test",
+       x = "Test Statistic (Average Squared Distance)",
+       y = "Density") +
+  theme_minimal(base_size = 14)
+
+
+
+
+
+
+
+############################### FDA Vis #######################
+organ <- 'heart'
+
+data_rest   <- t((rest_organs[[organ]][, -c(1,2)]))
+
+
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+ft_rest <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  data_rest, my_basis
+)
+
+
+
+plot(ft_rest[1])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+plot(ft_stress[1,])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+
+ft_s_rest <- smooth.fd(ft_rest, fdPar(ft_rest, 2, 1e4))
+
+plot(ft_s_rest[1])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+
+# pca_fd <- pca.fd(ft, nharm = 3)   # 3  (principal components)
+# plot.pca.fd(pca_fd, harm = 1:2)
+
+
+
+
+
+
+
+
+
+
+
