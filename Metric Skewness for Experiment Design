@@ -65,7 +65,89 @@ split_by_organ <- function(df) {
 rest_organs   <- split_by_organ(rest_df)
 stress_organs <- split_by_organ(stress_df)
 
+##################################################### Visualization #############################3
 # organ <- 'heart'
+# organ <- 'spleen'
+
+### average on all patients 
+
+### REST
+dr_1 <- rest_organs$heart[,-c(1,2)]
+ddr_1 <- apply(dr_1, 2, mean)
+
+
+dr_2 <- rest_organs$spleen[,-c(1,2)]
+ddr_2 <- apply(dr_2, 2, mean)
+
+### Stress
+
+ds_1 <- stress_organs$heart[,-c(1,2)]
+dds_1 <- apply(ds_1, 2, mean)
+
+
+ds_2 <- stress_organs$spleen[,-c(1,2)]
+dds_2 <- apply(ds_2, 2, mean)
+
+
+
+
+
+
+
+
+ft_rest_1 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_1, my_basis
+)
+
+ft_rest_2 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_2, my_basis
+)
+
+
+
+ft_stress_1 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_1, my_basis
+)
+
+ft_stress_2 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_2, my_basis
+)
+
+
+##### Smoothing 
+
+ft_s_rest_1 <- smooth.fd(ft_rest_1, fdPar(ft_rest_1, 2, 1e4))
+ft_s_stress_1 <- smooth.fd(ft_stress_1, fdPar(ft_stress_1, 2, 1e4))
+
+
+ft_s_rest_2 <- smooth.fd(ft_rest_2, fdPar(ft_rest_2, 2, 1e4))
+ft_s_stress_2 <- smooth.fd(ft_stress_2, fdPar(ft_stress_2, 2, 1e4))
+
+
+
+
+par(mfrow = c(2, 2))
+
+plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+     main = 'Heart Rest', bty = "l", cex.main = 1.5)
+plot(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+     main = 'Heart Stress', bty = "l", cex.main = 1.5)
+
+plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+     main = 'Spleen Rest', bty = "l", cex.main = 1.5)
+plot(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+     main = 'Spleen Stress', bty = "l", cex.main = 1.5)
+
+
+#############################################################################################
 
 make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
   # Extract data for one organ
