@@ -1,3 +1,4 @@
+
 ## Libraries 
 library(dplyr)
 Sys.setenv(RGL_USE_NULL=TRUE)
@@ -92,7 +93,8 @@ dds_2 <- apply(ds_2, 2, mean)
 
 
 
-
+#### Define the basis
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
 
 
 ft_rest_1 <- Data2fd(
@@ -159,7 +161,7 @@ make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
   
   ################################## FDA #######################
   
-
+  
   ft_rest <- Data2fd(
     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
@@ -314,9 +316,13 @@ Permutation_test <- function(matrices, iter, seed){
 
 
 
+start_time <- Sys.time()
 
+organ_results <- lapply(organ_arrays, Permutation_test,iter = 2000, seed = 1111)
 
-organ_results <- lapply(organ_arrays, Permutation_test,iter = 100, seed = 1111)
+end_time <- Sys.time()
+
+runtime <- end_time - start_time
 
 summary_table <- data.frame(
   organ   = names(organ_results),
@@ -448,14 +454,3 @@ points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
 
 # pca_fd <- pca.fd(ft, nharm = 3)   # 3  (principal components)
 # plot.pca.fd(pca_fd, harm = 1:2)
-
-
-
-
-
-
-
-
-
-
-
