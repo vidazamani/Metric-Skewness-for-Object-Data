@@ -214,13 +214,13 @@ perm_test_mardia <- function(X, B = 1000) {
 # --------------------------------------------------------
 alpha <- 0.05
 nrep  <- 10
-sample_sizes <- seq(50, 300, 50)
+sample_sizes <- seq(50, 300, 100)
 p <- 3
 
 xi <- rep(0, p)
 Omega <- diag(p)
 alpha_skew <- rep(0, p)
-cores <- detectCores() - 1
+ncores <- detectCores() - 1
 cl <- makeCluster(ncores)
 
 clusterEvalQ(cl, {
@@ -350,7 +350,7 @@ level_test_parallel <- function(gen_fun, sample_sizes,
 
 set.seed(1)
 
-sample_sizes <- seq(50, 300, 50)
+sample_sizes <- seq(50, 300, 100)
 
 res <- level_test_parallel(
   gen_fun = gen_mvn,
