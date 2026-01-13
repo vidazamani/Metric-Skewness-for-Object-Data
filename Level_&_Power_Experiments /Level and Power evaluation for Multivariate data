@@ -431,87 +431,150 @@ p_sdb <- ggplot(df_sdb,
 
 
 
+################################## Power Evaluation ########################
 
-
-
-################### parallel ##########################
-
-# --------------------------------------------------------
-# Parameters
-# --------------------------------------------------------
-alpha <- 0.05
-nrep  <- 100
-sample_sizes <- seq(50, 300, 50)
-p <- 3
-
-xi <- rep(0, p)
-Omega <- diag(p)
-alpha_skew <- rep(0, p)
-ncores <- detectCores() - 1
-cl <- makeCluster(ncores)
-
-clusterEvalQ(cl, {
-  library(sn)
-})
-
-clusterExport(
-  cl,
-  c("metric_skew", "mardia_skewness",
-    "perm_test_metric", "perm_test_mardia",
-    "xi", "Omega", "alpha_skew",'n'),
-  envir = environment()
-)
-# --------------------------------------------------------
-# Level estimation 
-# --------------------------------------------------------
-results_hhat   <- numeric(length(sample_sizes))
-results_mardia <- numeric(length(sample_sizes))
-
-for (i in seq_along(sample_sizes)) {
+power_fixed_n <- function(
+    n,
+    alpha_grid,
+    nrep,
+    B,
+    alpha
+) {
   
-  n <- sample_sizes[i]
+  p <- length(alpha_grid[[1]])
+  xi <- rep(0, p)
+  Omega <- diag(p)
   
-  pvals <- parSapply(cl, seq_len(nrep), function(r) {
+  power <- matrix(NA, nrow = length(alpha_grid), ncol = 3)
+  colnames(power) <- c("Metric_perm", "Mardia_perm", "Mardia_asymp")
+  
+  for (k in seq_along(alpha_grid)) {
     
+    alpha_skew <- alpha_grid[[k]]
     
-    X <- rmsn(
-      n     = n,
-      xi    = xi,
-      Omega = Omega,
-      alpha = alpha_skew
-    )
+    pvals <- replicate(nrep, {
+      
+      X <- gen_azzalini(n, p, alpha_skew)
+      
+      c(
+        Metric_perm  = perm_test_metric(X, B),
+        Mardia_perm  = perm_test_mardia(X, B),
+        Mardia_asymp = asymp_pvalue_mardia(X)
+      )
+    })
     
-    c(
-      perm_test_metric(X),
-      perm_test_mardia(X)
-    )
-  })
+    power[k, ] <- rowMeans(pvals < alpha)
+    
+    cat("n =", n,
+        "alpha =", paste(alpha_skew, collapse = ","),
+        "power =", round(power[k, ], 3), "\n")
+  }
   
-  results_hhat[i]   <- mean(pvals[1, ] < alpha)
-  results_mardia[i] <- mean(pvals[2, ] < alpha)
-  
-  cat("Done n =", n,
-      "| hhat:", round(results_hhat[i], 3),
-      "| mardia:", round(results_mardia[i], 3), "\n")
+  data.frame(
+    alpha_norm = sapply(alpha_grid, function(a) sqrt(sum(a^2))),
+    power
+  )
 }
 
 
-stopCluster(cl)
 
-plot(sample_sizes, results_hhat, type = "b", pch = 19,
-     ylim = c(0, max(results_hhat, results_mardia)),
-     xlab = "Sample Size",
-     ylab = "Proportion Rejected (p < alpha)",
-     main = "Level Evaluation: Multivariate Permutation Tests")
 
-lines(sample_sizes, results_mardia, type = "b", pch = 17, col = "blue")
+alpha_grid <- list(
+  c(0, 0, 0),
+  c(1, 0, 0),
+  c(2, 0, 0),
+  c(3, 0, 0),
+  c(4, 0, 0)
+)
 
-abline(h = alpha, col = "red", lty = 2)
+start <- Sys.time()
 
-legend("topright",
-       legend = c("h-hat(p)", "Mardia"),
-       pch = c(19, 17),
-       col = c("black", "blue"))
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+end <- Sys.time()
+
+running_time <- end - start
+
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+
+
+
+
+df_n20 <- res_n20 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 20)
+
+df_n200 <- res_n200 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 200)
+
+df_power <- bind_rows(df_n20, df_n200)
+
+
+
+ggplot(
+  df_power,
+  aes(x = alpha_norm, y = Power, color = Test)
+) +
+  geom_line(linewidth = 1) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.7
+  )+
+  geom_point(size = 2) +
+  facet_wrap(~ n, labeller = label_both) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = expression("norm of "* alpha *" "),
+    y = "Power",
+    title = "Power Comparison under Azzalini Skew-Normal Data"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
