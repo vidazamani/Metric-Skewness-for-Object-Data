@@ -1,10 +1,14 @@
 library(sn)
 library(MASS)
 library(parallel)
-
+library(patchwork)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(mvnormalTest)
 
 # --------------------------------------------------------
-# Function to compute h-hat(p) (replacement for skewness)
+# Function to compute h-hat(p) (Metric skewness)
 # --------------------------------------------------------
 metric_skew <- function(X) {
   X <- as.matrix(X)
@@ -81,31 +85,29 @@ metric_skew(gen_mvn(n,p))
 
 # Example: skewed data
 
-##### Azzalini’s skew-normal
+##### Azzalini’s skew-normal ### you can use power evaluation by using this
 
-n <- 200          # sample size
-p <- 3            # dimension
+n <- 200              # sample size
+p <- 3                # dimension
+## With the parameter alpha, you can control the skewness and 
+## Direction of skewness controlled by sign of alpha
 
- 
-
-### With the parameter alpha, you can control the skewness
-alpha <- c(50, -8, -11)     # skewness (shape) parameter
-alpha <- rep(0, p)          # <-- zero skewness
-
+alpha <- c(1, 1, 1)   # skewness (shape) parameter 
+alpha <- rep(0, p)    # zero skewness
 
 
 
-gen_azzalini <- function(n, p) {
+
+gen_azzalini <- function(n, p, alpha) {
   xi <- rep(0, p)  # location (mean)
   Omega <- diag(p) # covariance matrix (must be positive definite)
-  alpha <- rep(0, p)   # zero skewness
   
-  rmsn(n = n, xi = xi, Omega = Omega, alpha = alpha)
+  rmsn(n , xi , Omega , alpha)
 }
 
 
 
-metric_skew(gen_azzalini(n,p))
+metric_skew(gen_azzalini(n,p,alpha))
 
 
 # --------------------------------------------------------
@@ -138,27 +140,27 @@ rmsn_sdb <- function(n, xi, Lambda, Sigma) {
 }
 
 
-n <- 200
-
+n <- 200              # sample size
+p <- 3                # dimension
 
 ### with the Lambda you can control the skewness
 Lambda <- matrix(
   c( 2,  0,
      0,  1,
      -1,  1),
-  nrow = M, byrow = TRUE
+  nrow = p, byrow = TRUE
 )
 
+Lambda <- matrix(0, nrow = p, ncol = 2) # zero skewness
 
-gen_sdb_sym <- function(n, p) {
+gen_sdb_sym <- function(n, p, Lambda) {
   xi <- rep(0, p)
   Sigma <- diag(p)
-  Lambda <- matrix(0, nrow = p, ncol = 2) # <-- zero skewness
   rmsn_sdb(n, xi, Lambda, Sigma) 
 }
 
 
-metric_skew(gen_sdb_sym(n,p))
+metric_skew(gen_sdb_sym(n,p,Lambda))
 
 
 
@@ -167,7 +169,7 @@ metric_skew(gen_sdb_sym(n,p))
 # --------------------------------------------------------
 # Permutation test for h-hat(p) (Metric Skewness) = symmetry
 # --------------------------------------------------------
-perm_test_metric <- function(X, B = 1000) {
+perm_test_metric <- function(X, B) {
   
   X <- as.matrix(X)
   n <- nrow(X)
@@ -193,7 +195,7 @@ perm_test_metric <- function(X, B = 1000) {
 # permutation test for Mardia's skewness
 # --------------------------------------------------------
 
-perm_test_mardia <- function(X, B = 1000) {
+perm_test_mardia <- function(X, B) {
   t_obs <- mardia_skewness(X)
   n <- nrow(X)
   
@@ -205,6 +207,231 @@ perm_test_mardia <- function(X, B = 1000) {
   mean(t_perm >= t_obs)
 }
 
+# --------------------------------------------------------
+# Asymptotic test for Mardia multivariate skewness
+# --------------------------------------------------------
+
+
+asymp_pvalue_mardia <- function(X) {
+
+   as.numeric(as.vector(mardia(X)$mv.test$`p-value`)[1])
+
+}
+
+
+
+###################################################################################
+
+# --------------------------------------------------------
+# Parallel level test for different data generator
+# --------------------------------------------------------
+level_test_parallel <- function(gen_fun, sample_sizes,
+                                nrep, B,
+                                alpha, p,
+                                alpha_skew,
+                                ncores = detectCores() - 1) {
+  
+  # create cluster ONCE
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)
+  
+  # load needed packages on workers
+  clusterEvalQ(cl, {
+    library(MASS,sn)
+  })
+  
+  # export functions & objects used by workers
+  clusterExport(
+    cl,
+    c("gen_fun","perm_test_metric", "perm_test_mardia",
+      "metric_skew", "mardia_skewness", "B", "p",'n','rmsn_sdb','rmsn','asymp_pvalue_mardia',
+      'mardia'),
+    envir = environment()
+  )
+  
+  results_hhat   <- numeric(length(sample_sizes))
+  results_mardia <- numeric(length(sample_sizes))
+  results_mardia_asym <- numeric(length(sample_sizes))
+  
+  for (i in seq_along(sample_sizes)) {
+    
+    n <- sample_sizes[i]
+    
+    pvals <- parSapply(cl, seq_len(nrep), function(r) {
+      
+      X <- gen_fun(n, p, alpha_skew)
+      
+      c(
+        perm_test_metric(X, B),
+        perm_test_mardia(X, B),
+        asymp_pvalue_mardia(X)
+      )
+    })
+    
+    results_hhat[i]   <- mean(pvals[1, ] < alpha)
+    results_mardia[i] <- mean(pvals[2, ] < alpha)
+    results_mardia_asym[i] <- mean(pvals[3, ] < alpha)
+    
+    
+    cat("Done n =", n,
+        "| hhat:", round(results_hhat[i], 3),
+        "| mardia:", round(results_mardia[i], 3), 
+        "| mardia_asym:", round(results_mardia_asym[i], 3),"\n")
+  }
+  
+  list(
+    sample_sizes = sample_sizes,
+    hhat = results_hhat,
+    mardia = results_mardia,
+    mardia_asym = results_mardia_asym
+  )
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+set.seed(1)
+
+## Parameters 
+sample_sizes <- seq(20, 300, 40)
+nrep = 1000
+B = 500
+alpha = 0.05
+p = 3
+
+
+
+# res <- level_test_parallel(
+#   gen_fun = gen_mvn,
+#   sample_sizes = sample_sizes,
+#   nrep = 2,
+#   B = 500,
+#   alpha = 0.05,
+#   p = 3
+# )
+
+start <- Sys.time()
+
+
+res_sdb <- level_test_parallel(
+  gen_fun = gen_sdb_sym,
+  sample_sizes = sample_sizes,
+  nrep,
+  B,
+  alpha ,
+  p,
+  alpha_skew = matrix(0, nrow = p, ncol = 2)
+)
+
+
+res_az <- level_test_parallel(
+  gen_fun = gen_azzalini,
+  sample_sizes = sample_sizes,
+  nrep,
+  B,
+  alpha,
+  p,
+  alpha_skew = c(rep(0,p))
+)
+
+
+end <- Sys.time()
+
+running_time <- end - start
+
+#### Visualization
+
+df_az <- tibble(
+  n = res_az$sample_sizes,
+  Metric_perm = res_az$hhat,
+  Mardia_perm = res_az$mardia,
+  Mardai_Asym = res_az$mardia_asym
+) |>
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
+  mutate(Dataset = "Azzalini")
+
+df_sdb <- tibble(
+  n = res_sdb$sample_sizes,
+  Metric_perm = res_sdb$hhat,
+  Mardia_perm = res_sdb$mardia,
+  Mardai_Asym = res_sdb$mardia_asym
+) |>
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
+  mutate(Dataset = "SDB")
+
+df_all <- bind_rows(df_az, df_sdb)
+
+
+
+p_az <- ggplot(df_az,
+               aes(x = n, y = Rejection,
+                   color = Statistic, shape = Statistic)) +
+  geom_line(linewidth = 0.9, linetype = 'solid') +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("black", "blue",'green')) +
+  scale_shape_manual(values = c(19, 17,18)) +
+  labs(
+    title = "Level Evaluation (Azzalini Data)",
+    x = "Sample Size",
+    y = expression("Proportion of Rejection (p < " * alpha * ")")
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+
+p_sdb <- ggplot(df_sdb,
+                aes(x = n, y = Rejection,
+                    color = Statistic, shape = Statistic)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("black", "blue",'green')) +
+  scale_shape_manual(values = c(19, 17,18)) +
+  labs(
+    title = "Level Evaluation (SDB Data)",
+    x = "Sample Size",
+    y = expression("Proportion of Rejection (p < " * alpha * ")")
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+
+
+
+
+(p_az | p_sdb) +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 11),
+    legend.key.width = unit(1.3, "cm"),
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
+
 
 
 ################### parallel ##########################
@@ -213,8 +440,8 @@ perm_test_mardia <- function(X, B = 1000) {
 # Parameters
 # --------------------------------------------------------
 alpha <- 0.05
-nrep  <- 10
-sample_sizes <- seq(50, 300, 100)
+nrep  <- 100
+sample_sizes <- seq(50, 300, 50)
 p <- 3
 
 xi <- rep(0, p)
@@ -235,7 +462,7 @@ clusterExport(
   envir = environment()
 )
 # --------------------------------------------------------
-# Level estimation (parallel over replications)
+# Level estimation 
 # --------------------------------------------------------
 results_hhat   <- numeric(length(sample_sizes))
 results_mardia <- numeric(length(sample_sizes))
@@ -285,125 +512,6 @@ legend("topright",
        legend = c("h-hat(p)", "Mardia"),
        pch = c(19, 17),
        col = c("black", "blue"))
-
-
-
-###################################################################################
-
-# --------------------------------------------------------
-# Parallel level test for differnt data generator
-# --------------------------------------------------------
-level_test_parallel <- function(gen_fun, sample_sizes,
-                                nrep = 100, B = 500,
-                                alpha = 0.05, p = 3,
-                                ncores = detectCores() - 1) {
-  
-  # create cluster ONCE
-  cl <- makeCluster(ncores)
-  on.exit(stopCluster(cl), add = TRUE)
-  
-  # load needed packages on workers
-  clusterEvalQ(cl, {
-    library(MASS,sn)
-  })
-  
-  # export functions & objects used by workers
-  clusterExport(
-    cl,
-    c("gen_fun","perm_test_metric", "perm_test_mardia",
-      "metric_skew", "mardia_skewness", "B", "p",'n','rmsn_sdb','rmsn'),
-    envir = environment()
-  )
-  
-  results_hhat   <- numeric(length(sample_sizes))
-  results_mardia <- numeric(length(sample_sizes))
-  
-  for (i in seq_along(sample_sizes)) {
-    
-    n <- sample_sizes[i]
-    
-    pvals <- parSapply(cl, seq_len(nrep), function(r) {
-      
-      X <- gen_fun(n, p)
-      
-      c(
-        perm_test_metric(X, B),
-        perm_test_mardia(X, B)
-      )
-    })
-    
-    results_hhat[i]   <- mean(pvals[1, ] < alpha)
-    results_mardia[i] <- mean(pvals[2, ] < alpha)
-    
-    cat("Done n =", n,
-        "| hhat:", round(results_hhat[i], 3),
-        "| mardia:", round(results_mardia[i], 3), "\n")
-  }
-  
-  list(
-    sample_sizes = sample_sizes,
-    hhat = results_hhat,
-    mardia = results_mardia
-  )
-}
-
-
-set.seed(1)
-
-sample_sizes <- seq(50, 300, 100)
-
-res <- level_test_parallel(
-  gen_fun = gen_mvn,
-  sample_sizes = sample_sizes,
-  nrep = 2,
-  B = 500,
-  alpha = 0.05,
-  p = 3
-)
-
-
-res <- level_test_parallel(
-  gen_fun = gen_sdb_sym,
-  sample_sizes = sample_sizes,
-  nrep = 3,
-  B = 500,
-  alpha = 0.05,
-  p = 3
-)
-
-
-res <- level_test_parallel(
-  gen_fun = gen_azzalini,
-  sample_sizes = sample_sizes,
-  nrep = 3,
-  B = 500,
-  alpha = 0.05,
-  p = 3
-)
-
-
-
-
-
-plot(res$sample_sizes, res$hhat, type = "b", pch = 19,
-     ylim = c(0, max(res$hhat, res$mardia)),
-     xlab = "Sample Size",
-     ylab = "Proportion Rejected (p < alpha)",
-     main = "Parallel Level Test: Multivariate Skewness")
-
-lines(res$sample_sizes, res$mardia, type = "b", pch = 17, col = "blue")
-abline(h = 0.05, col = "red", lty = 2)
-
-legend("topright",
-       legend = c("Metric Skew", "Mardia"),
-       pch = c(19, 17),
-       col = c("black", "blue"))
-
-
-
-
-
-
 
 
 
