@@ -7,7 +7,7 @@ library(ggplot2)
 library(dplyr)
 library(parallel)
 library(purrr)
-
+library(Rcpp)
 
 ### This is a way to generate data (corr and Cov)
 
@@ -172,10 +172,10 @@ sample_sizes <- seq(10, 200, by = 20)
 sample_sizes <- c(2,5,10,20)
 
 res <- estimate_level_over_nsamples(sample_sizes,
-                                    dim = 2,
+                                    dim = 4,
                                     mu = 0, sig = 1,
-                                    nrep = 100,   # raise to 200+ for stable estimates
-                                    iter = 100,    # increase B for smoother p-values
+                                    nrep = 10,   # raise to 200+ for stable estimates
+                                    iter = 10,    # increase B for smoother p-values
                                     alpha = 0.05,
                                     regularize = 0,
                                     seed)
@@ -186,5 +186,69 @@ res <- estimate_level_over_nsamples(sample_sizes,
 plot(res$sample_sizes, res$proportions, type = "b", pch = 19,
      xlab = "Sample size (number of matrices)",
      ylab = "Proportion p < alpha",
-     main = "Level of permutation inversion test (mu = 0)")
+     main = "Level of permutation test (mu = 0)")
 abline(h = 0.05, col = "red", lty = 2)
+
+
+
+
+
+############## Asymptotic test ###########################
+distance_matrix <- function(mats) {
+  n <- dim(mats)[3]
+  
+  D2 <- sapply(seq_len(n), function(i) {
+    sapply(seq_len(n), function(j) {
+      if (i != j) {
+        distcov(mats[, , i],
+                mats[, , j],
+                method = "LogEuclidean")^2
+      } else {
+        0
+      }
+    })
+  })
+  
+  return(D2)
+}
+
+set.seed(1)
+
+n   <- 15
+dim <- 5
+mu  <- 0
+sig <- 0.5
+
+mats <- generate_matrices(n, dim, mu, sig)
+
+D <- distance_matrix(mats)
+
+u1_statistic <- function(D2) {
+  n <- nrow(D2)
+  total <- 0
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij2 <- D2[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik2 <- D2[i, k]
+        Djk2 <- D2[j, k]
+        
+        total <- total +
+          Dij2 * Dik2 +
+          Djk2 * Dij2 +
+          Dik2 * Djk2
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+u1_statistic(D)
+
+
+
+
+
