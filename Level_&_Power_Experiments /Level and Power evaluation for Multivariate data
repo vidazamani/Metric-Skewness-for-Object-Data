@@ -5,7 +5,7 @@ library(patchwork)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
-library(mvnormalTest)
+
 
 # --------------------------------------------------------
 # Function to compute h-hat(p) (Metric skewness)
@@ -386,7 +386,8 @@ p_az <- ggplot(df_az,
     title = "Level Evaluation (Azzalini Data)",
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
-  ) +
+  ) + 
+  ylim(0, 0.1) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
@@ -407,7 +408,8 @@ p_sdb <- ggplot(df_sdb,
     title = "Level Evaluation (SDB Data)",
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
-  ) +
+  ) +  
+  ylim(0, 0.1) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
@@ -534,7 +536,7 @@ ggplot(
   facet_wrap(~ n, labeller = label_both) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
-    x = expression("norm of "* alpha *" "),
+    x = expression("norm of "* alpha *" (Skewness magnitude)"),
     y = "Power",
     title = "Power Comparison under Azzalini Skew-Normal Data"
   ) +
