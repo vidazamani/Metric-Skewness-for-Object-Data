@@ -67,7 +67,6 @@ average_squared_distances_inverted <- function(matrices) {
 
 
 
-
 # --------------------------------------------------------
 # Function to compute skewness
 # --------------------------------------------------------
@@ -196,49 +195,107 @@ abline(h = 0.05, col = "red", lty = 2)
 ############## Asymptotic test ###########################
 distance_matrix <- function(mats) {
   n <- dim(mats)[3]
+  D <- matrix(0, n, n)
   
-  D2 <- sapply(seq_len(n), function(i) {
-    sapply(seq_len(n), function(j) {
-      if (i != j) {
-        distcov(mats[, , i],
-                mats[, , j],
-                method = "LogEuclidean")^2
-      } else {
-        0
-      }
-    })
-  })
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      d2 <- distcov(
+        mats[, , i],
+        mats[, , j],
+        method = "LogEuclidean"
+      )^2
+      
+      D[i, j] <- d2
+      D[j, i] <- d2
+    }
+  }
   
-  return(D2)
+  D
 }
 
-set.seed(1)
+distance_matrix_to_inverse <- function(mats) {
+  inv_mats <- invert_matrices(mats)
+  n <- dim(mats)[3]
+  
+  Dinv <- matrix(0, n, n)
+  
+  for (i in 1:n) {
+    Xi <- mats[, , i]
+    for (j in 1:n) {
+      Dinv[i, j] <-
+        distcov(Xi, inv_mats[, , j],
+                method = "LogEuclidean")^2
+    }
+  }
+  
+  Dinv
+}
 
-n   <- 15
-dim <- 5
-mu  <- 0
-sig <- 0.5
 
-mats <- generate_matrices(n, dim, mu, sig)
 
-D <- distance_matrix(mats)
+# distance_matrix <- function(mats) {
+#   n <- dim(mats)[3]
+#   
+#   D2 <- sapply(seq_len(n), function(i) {
+#     sapply(seq_len(n), function(j) {
+#       if (i != j) {
+#         distcov(mats[, , i],
+#                 mats[, , j],
+#                 method = "LogEuclidean")^2
+#       } else {
+#         0
+#       }
+#     })
+#   })
+#   
+#   return(D2)
+# }
 
-u1_statistic <- function(D2) {
-  n <- nrow(D2)
+
+
+# distance_matrix_fast <- function(mats) {
+#   n <- dim(mats)[3]
+#   D <- matrix(0, n, n)
+#   
+#   idx <- which(upper.tri(D), arr.ind = TRUE)
+#   
+#   for (m in seq_len(nrow(idx))) {
+#     i <- idx[m, 1]
+#     j <- idx[m, 2]
+#     
+#     d2 <- distcov(
+#       mats[, , i],
+#       mats[, , j],
+#       method = "LogEuclidean"
+#     )^2
+#     
+#     D[i, j] <- d2
+#     D[j, i] <- d2
+#   }
+#   
+#   D
+# }
+
+
+
+
+
+u1_statistic <- function(D) {
+  n <- nrow(D)
   total <- 0
   
   for (i in 1:(n - 2)) {
     for (j in (i + 1):(n - 1)) {
-      Dij2 <- D2[i, j]
+      Dij <- D[i, j]
       
       for (k in (j + 1):n) {
-        Dik2 <- D2[i, k]
-        Djk2 <- D2[j, k]
+        Dik <- D[i, k]
+        Djk <- D[j, k]
         
         total <- total +
-          Dij2 * Dik2 +
-          Djk2 * Dij2 +
-          Dik2 * Djk2
+          Dij * Dik +
+          Djk * Dij +
+          Dik * Djk
       }
     }
   }
@@ -247,6 +304,172 @@ u1_statistic <- function(D2) {
 }
 
 u1_statistic(D)
+
+
+u2_statistic <- function(D, G) {
+  n <- nrow(D)
+  total <- 0
+  
+  if (n < 3) {
+    stop("U2 statistic requires at least n >= 3 observations.")
+  }
+  
+  stopifnot(
+    is.matrix(D), is.matrix(G),
+    nrow(D) == ncol(D),
+    nrow(G) == ncol(G),
+    nrow(D) == nrow(G)
+  )
+  
+  total <- 0
+  
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij <- D[i, j] - G[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik <- D[i, k] - G[i, k]
+        Djk <- D[j, k] - G[j, k]
+        
+        total <- total +
+          Dij * Dik +   # r(i, j, k)
+          Djk * Dij +   # r(j, k, i)
+          Dik * Djk     # r(k, i, j)
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+
+
+
+asymptotic_metric_skewness <- function(D, G) {
+  n <- nrow(D)
+  
+  # U-statistics of order 3 require n >= 3
+  if (n < 3) return(NA_real_)
+  
+  U1 <- u1_statistic(D)
+  U2 <- u2_statistic(D, G)
+  
+  # Guard against division by zero or numerical degeneracy
+  if (!is.finite(U1) || abs(U1) < .Machine$double.eps) {
+    return(NA_real_)
+  }
+  
+  U2 / U1
+}
+
+
+set.seed(1)
+
+n   <- 3
+dim <- 5
+mu  <- 0
+sig <- 0.5
+
+mats <- generate_matrices(n, dim, mu, sig)
+
+D <- distance_matrix(mats)
+G <- distance_matrix_to_inverse(mats)
+
+u1_statistic(D)
+u2_statistic(D,G)
+
+metric_skew_asym <- asymptotic_metric_skewness(D, G)
+metric_skew_asym
+
+
+
+
+####
+
+s1_kernel <- function(j, k, l, D) {
+  (D[j, k] * D[j, l] +
+     D[k, l] * D[k, j] +
+     D[l, j] * D[l, k]) / 3
+}
+
+s2_kernel <- function(j, k, l, D, G) {
+  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
+  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
+  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
+  
+  (r_jkl + r_klj + r_ljk) / 3
+}
+
+
+
+s_hat_j <- function(j, D, G, p) {
+  n <- nrow(D)
+  
+  if (n < 3) return(NA_real_)
+  
+  idx <- setdiff(seq_len(n), j)
+  denom <- choose(n - 1, 2)
+  total <- 0
+  
+  for (a in 1:(length(idx) - 1)) {
+    for (b in (a + 1):length(idx)) {
+      k <- idx[a]
+      l <- idx[b]
+      
+      if (p == 1) {
+        total <- total + s1_kernel(j, k, l, D)
+      } else if (p == 2) {
+        total <- total + s2_kernel(j, k, l, D, G)
+      }
+    }
+  }
+  
+  total / denom
+}
+
+
+s_hat_vector <- function(D, G, p) {
+  n <- nrow(D)
+  
+  vapply(
+    seq_len(n),
+    function(j) s_hat_j(j, D, G, p),
+    numeric(1)
+  )
+}
+
+
+sigma_hat <- function(D, G) {
+  n <- nrow(D)
+  
+  if (n < 3) return(matrix(NA_real_, 2, 2))
+  
+  s1 <- s_hat_vector(D, p = 1)
+  s2 <- s_hat_vector(D, G, p = 2)
+  
+  s1c <- s1 - mean(s1)
+  s2c <- s2 - mean(s2)
+  
+  sigma <- matrix(0, 2, 2)
+  
+  sigma[1, 1] <- mean(s1c * s1c)
+  sigma[1, 2] <- mean(s1c * s2c)
+  sigma[2, 1] <- sigma[1, 2]
+  sigma[2, 2] <- mean(s2c * s2c)
+  
+  sigma
+}
+
+
+D <- distance_matrix_fast(mats)
+G <- distance_matrix_to_inverse(mats)
+
+sigma_hat(D, G)
+
+
+
+
 
 
 
