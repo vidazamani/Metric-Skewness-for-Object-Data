@@ -85,7 +85,7 @@ metric_skew(gen_mvn(n,p))
 
 # Example: skewed data
 
-##### Azzalini’s skew-normal ### you can use power evaluation by using this
+##### Azzalini’s skew-normal 
 
 n <- 200              # sample size
 p <- 3                # dimension
@@ -551,6 +551,306 @@ ggplot(
 
 
 
+############## Asymptotic test for Metric Skewness ###########################
+
+distance_matrix_mv <- function(X) {
+  # X: n x d matrix
+  n <- nrow(X)
+  D <- matrix(0, n, n)
+  
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      d2 <- sum((X[i, ] - X[j, ])^2)
+      D[i, j] <- d2
+      D[j, i] <- d2
+    }
+  }
+  
+  D
+}
+
+
+distance_matrix_to_flip <- function(X) {
+  n <- nrow(X)
+  Dflip <- matrix(0, n, n)
+  
+  for (i in 1:n) {
+    Xi <- X[i, ]
+    for (j in 1:n) {
+      Dflip[i, j] <- sum((Xi + X[j, ])^2)
+    }
+  }
+  
+  Dflip
+}
+
+
+
+
+u1_statistic <- function(D) {
+  n <- nrow(D)
+  total <- 0
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij <- D[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik <- D[i, k]
+        Djk <- D[j, k]
+        
+        total <- total +
+          Dij * Dik +
+          Djk * Dij +
+          Dik * Djk
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+
+
+u2_statistic <- function(D, G) {
+  n <- nrow(D)
+  total <- 0
+  
+  if (n < 3) {
+    stop("U2 statistic requires at least n >= 3 observations.")
+  }
+  
+  stopifnot(
+    is.matrix(D), is.matrix(G),
+    nrow(D) == ncol(D),
+    nrow(G) == ncol(G),
+    nrow(D) == nrow(G)
+  )
+  
+  total <- 0
+  
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij <- D[i, j] - G[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik <- D[i, k] - G[i, k]
+        Djk <- D[j, k] - G[j, k]
+        
+        total <- total +
+          Dij * Dik +   # r(i, j, k)
+          Djk * Dij +   # r(j, k, i)
+          Dik * Djk     # r(k, i, j)
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+
+
+
+asymptotic_metric_skewness <- function(D, G) {
+  
+  n <- nrow(D)
+  
+  # U-statistics of order 3 require n >= 3
+  if (n < 3) return(NA_real_)
+  
+  U1 <- u1_statistic(D)
+  U2 <- u2_statistic(D, G)
+  
+  # Guard against division by zero or numerical degeneracy
+  if (!is.finite(U1) || abs(U1) < .Machine$double.eps) {
+    return(NA_real_)
+  }
+  
+  list(metric_skew = (U2 / U1), u1 = U1, u2 = U2)
+}
+
+#### example
+
+set.seed(1)
+n <- 100
+d <- 3
+
+X <- matrix(rnorm(n * d), n, d)
+
+
+
+D <- distance_matrix_mv(X)
+G <- distance_matrix_to_flip(X)
+
+metric_skew_asym <- asymptotic_metric_skewness(D, G)
+metric_skew_asym
+
+
+#### Variace 
+
+s1_kernel <- function(j, k, l, D) {
+  (D[j, k] * D[j, l] +
+     D[k, l] * D[k, j] +
+     D[l, j] * D[l, k]) / 3
+}
+
+s2_kernel <- function(j, k, l, D, G) {
+  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
+  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
+  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
+  
+  (r_jkl + r_klj + r_ljk) / 3
+}
+
+############# 1st option ######################
+
+s_hat_j <- function(j, D, G, p) {
+  n <- nrow(D)
+  
+  if (n < 3) return(NA_real_)
+  
+  idx <- setdiff(seq_len(n), j)
+  denom <- choose(n - 1, 2)
+  total <- 0
+  
+  for (a in 1:(length(idx) - 1)) {
+    for (b in (a + 1):length(idx)) {
+      k <- idx[a]
+      l <- idx[b]
+      
+      if (p == 1) {
+        total <- total + s1_kernel(j, k, l, D)
+      } else if (p == 2) {
+        total <- total + s2_kernel(j, k, l, D, G)
+      }
+    }
+  }
+  
+  total / denom
+}
+
+############ 2nd option #######################
+
+s_hat_j <- function(j, D, G, p) {
+  n <- nrow(D)
+  if (n < 3) return(NA_real_)
+  
+  idx <- setdiff(seq_len(n), j)
+  denom <- choose(n - 1, 2)
+  total <- 0
+  
+  for (k in idx) {
+    
+    for (l in setdiff(seq(k, n), j)) {   # <-- k <= l
+      
+      if (p == 1) {
+        total <- total + s1_kernel(j, k, l, D)
+      } else if (p == 2) {
+        total <- total + s2_kernel(j, k, l, D, G)
+      }
+    }
+  }
+  
+  total / denom
+}
+
+################################################
+
+s_hat_vector <- function(D, G, p) {
+  n <- nrow(D)
+  
+  vapply(
+    seq_len(n),
+    function(j) s_hat_j(j, D, G, p),
+    numeric(1)
+  )
+}
+
+
+sigma_hat <- function(D, G) {
+  
+  
+  n <- nrow(D)
+  
+  if (n < 3) return(matrix(NA_real_, 2, 2))
+  
+  s1 <- s_hat_vector(D, p = 1)
+  s2 <- s_hat_vector(D, G, p = 2)
+  
+  s1c <- s1 - mean(s1)
+  s2c <- s2 - mean(s2)
+  
+  sigma <- matrix(0, 2, 2)
+  
+  sigma[1, 1] <- mean(s1c * s1c)
+  sigma[1, 2] <- mean(s1c * s2c)
+  sigma[2, 1] <- sigma[1, 2]
+  sigma[2, 2] <- mean(s2c * s2c)
+  
+  sigma
+}
+
+
+
+
+sigma_hat(D, G)
+
+#### New estimator 1
+sigma_hat_est1 <- function(D, G) {
+  s2 <- s_hat_vector(D, G, p = 2)
+  if (anyNA(s2)) return(NA_real_)
+  mean(s2^2)
+}
+
+
+#### New estimator 2
+
+sigma_hat_est2 <- function(D, G) {
+  s2 <- s_hat_vector(D, G, p = 2)
+  if (anyNA(s2)) return(NA_real_)
+  
+  n <- length(s2)
+  psi <- numeric(n)
+  
+  for (i in seq_len(n)) {
+    psi[i] <- mean(s2[-i])
+  }
+  
+  mean(psi^2)
+}
+
+
+################## To just check ##############
+nrep <- 200
+n <- 200
+
+# ncores = detectCores() - 1
+# 
+# # create cluster ONCE
+# cl <- makeCluster(ncores)
+# on.exit(stopCluster(cl), add = TRUE)
+
+
+results <- sapply(seq_len(nrep), function(r) {
+  X <- gen_azzalini(n, p, alpha_skew)
+      #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
+  u1 <- u1_statistic(D)
+  u1s <- u1^2
+  U <- u2_statistic(D,G)/u1
+  s22 <- sigma_hat(D, G)[2,2]
+  return(c(u1s,
+           U ,
+           s22))
+})
+
+hist(results[2,], freq = FALSE, breaks = 30)
+
+sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
+
+curve(dnorm(x,sd = sd),add =TRUE)
 
 
 
@@ -559,10 +859,133 @@ ggplot(
 
 
 
+#### Asymptotic Test
+
+
+
+Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2")) {
+  
+  sigma_estimator <- match.arg(sigma_estimator)
+  n <- nrow(D)
+  
+  if (n < 3)
+    return(list(statistic = NA, p.value = NA))
+  
+  
+  
+  # U2 statistic
+  U2 <- u2_statistic(D, G)
+  
+  # variance estimation
+  sigma2_hat <- if (sigma_estimator == "est1") {
+    sigma_hat_est1(D, G)
+  } else {
+    sigma_hat_est2(D, G)
+  }
+  
+  if (!is.finite(sigma2_hat) || sigma2_hat <= 0)
+    return(list(statistic = NA, p.value = NA))
+  
+  Z <- sqrt(n) * (U2) / (3 * sqrt(sigma2_hat))
+  pval <- 1 - pnorm(Z)
+  
+  list(
+    statistic = Z,
+    p.value = pval,
+    method = sigma_estimator
+  )
+}
+
+Asymp_test(D, G, 'est1')
+
+######### OR
+
+
+# Asymp_test <- function(D, G) {
+#   
+#   n <- nrow(D)
+#   
+#   
+#   
+#   sigma_h <- sigma_hat(D, G)
+#   sigma22  <- sigma_h[2,2]
+#   
+#   Zobs <- sqrt(n) * (asymptotic_metric_skewness(D, G)$u2)/(asymptotic_metric_skewness(D, G)$u1)
+#   sdZ  <- sqrt((9 * sigma22) / (asymptotic_metric_skewness(D, G)$u1)^2)
+#   
+#   pval <- 1 - pnorm(Zobs, mean = 0, sd = sdZ)
+#   
+#   list(statistic = Zobs, p.value = pval)
+# }
+# 
+# Asymp_test(D, G)
 
 
 
 
+### with Azalini data
+
+estimate_level_asymp <- function(sample_sizes, p, alpha_skew,
+                                 nrep, alpha,
+                                 ncores = detectCores() - 1) {
+  
+  # create cluster ONCE
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)
+  
+  # load needed packages on workers
+  clusterEvalQ(cl, {
+    library(MASS,sn)
+  })
+  
+  # export functions & objects used by workers
+  clusterExport(
+    cl,
+    c("u1_statistic","u2_statistic", "metric_skew_asym",
+      "s1_kernel", "s2_kernel", "D", "G",'sample_sizes','s_hat_j','sigma_hat','Asymp_test',
+      's_hat_vector', 'distance_matrix_mv', 'distance_matrix_to_flip', 'gen_azzalini',
+      'alpha_skew'),
+    envir = environment()
+  )
+  
+  proportions <- numeric(length(sample_sizes))
+  
+  for (k in seq_along(sample_sizes)) {
+    n <- sample_sizes[k]
+    
+    results <- mclapply(seq_len(nrep), function(r) {
+      X <- gen_azzalini(n, p, alpha_skew)
+      #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
+      test <- Asymp_test(D, G, 'est1')
+      test$p.value < alpha
+    }, mc.cores = ncores)
+    
+    proportions[k] <- mean(unlist(results))
+    cat(sprintf("n=%d -> rejection proportion = %.3f\n",
+                n, proportions[k]))
+  }
+  
+  list(sample_sizes = sample_sizes, proportions = proportions)
+}
+
+
+set.seed(1)
+
+p <- 3
+alpha_skew <- rep(0, p)
+sample_sizes <- c(50, 60, 70)
+nrep <- 1000     # very small, just for illustration
+alpha <- 0.05
+
+level_asymp <- estimate_level_asymp(
+  sample_sizes,
+  p,
+  alpha_skew,
+  nrep,
+  alpha
+)
 
 
 
