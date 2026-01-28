@@ -5,7 +5,7 @@ library(patchwork)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
-
+library(mvnormalTest)
 
 # --------------------------------------------------------
 # Function to compute h-hat(p) (Metric skewness)
@@ -213,9 +213,9 @@ perm_test_mardia <- function(X, B) {
 
 
 asymp_pvalue_mardia <- function(X) {
-
-   as.numeric(as.vector(mardia(X)$mv.test$`p-value`)[1])
-
+  
+  as.numeric(as.vector(mardia(X)$mv.test$`p-value`)[1])
+  
 }
 
 
@@ -440,15 +440,16 @@ power_fixed_n <- function(
     alpha_grid,
     nrep,
     B,
-    alpha
+    alpha,
+    sigma
 ) {
   
   p <- length(alpha_grid[[1]])
   xi <- rep(0, p)
   Omega <- diag(p)
   
-  power <- matrix(NA, nrow = length(alpha_grid), ncol = 3)
-  colnames(power) <- c("Metric_perm", "Mardia_perm", "Mardia_asymp")
+  power <- matrix(NA, nrow = length(alpha_grid), ncol = 4)
+  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp")
   
   for (k in seq_along(alpha_grid)) {
     
@@ -457,13 +458,18 @@ power_fixed_n <- function(
     pvals <- replicate(nrep, {
       
       X <- gen_azzalini(n, p, alpha_skew)
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
       
       c(
         Metric_perm  = perm_test_metric(X, B),
+        Metric_asymp = Asymp_test(D, G, sigma)$p.value,
         Mardia_perm  = perm_test_mardia(X, B),
         Mardia_asymp = asymp_pvalue_mardia(X)
       )
     })
+
+    
     
     power[k, ] <- rowMeans(pvals < alpha)
     
@@ -491,12 +497,12 @@ alpha_grid <- list(
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 10 , B = 500, 0.05,'est3')
 end <- Sys.time()
 
 running_time <- end - start
 
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 10 , B = 50, 0.05,'est3')
 
 
 
@@ -705,30 +711,30 @@ s2_kernel <- function(j, k, l, D, G) {
 
 ############# 1st option ######################
 
-s_hat_j <- function(j, D, G, p) {
-  n <- nrow(D)
-  
-  if (n < 3) return(NA_real_)
-  
-  idx <- setdiff(seq_len(n), j)
-  denom <- choose(n - 1, 2)
-  total <- 0
-  
-  for (a in 1:(length(idx) - 1)) {
-    for (b in (a + 1):length(idx)) {
-      k <- idx[a]
-      l <- idx[b]
-      
-      if (p == 1) {
-        total <- total + s1_kernel(j, k, l, D)
-      } else if (p == 2) {
-        total <- total + s2_kernel(j, k, l, D, G)
-      }
-    }
-  }
-  
-  total / denom
-}
+# s_hat_j <- function(j, D, G, p) {
+#   n <- nrow(D)
+#   
+#   if (n < 3) return(NA_real_)
+#   
+#   idx <- setdiff(seq_len(n), j)
+#   denom <- choose(n - 1, 2)
+#   total <- 0
+#   
+#   for (a in 1:(length(idx) - 1)) {
+#     for (b in (a + 1):length(idx)) {
+#       k <- idx[a]
+#       l <- idx[b]
+#       
+#       if (p == 1) {
+#         total <- total + s1_kernel(j, k, l, D)
+#       } else if (p == 2) {
+#         total <- total + s2_kernel(j, k, l, D, G)
+#       }
+#     }
+#   }
+#   
+#   total / denom
+# }
 
 ############ 2nd option #######################
 
@@ -850,9 +856,9 @@ n <- 200
 
 results <- sapply(seq_len(nrep), function(r) {
   X <- gen_azzalini(n, p, alpha_skew)
-      #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
-      D <- distance_matrix_mv(X)
-      G <- distance_matrix_to_flip(X)
+  #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+  D <- distance_matrix_mv(X)
+  G <- distance_matrix_to_flip(X)
   u1 <- u1_statistic(D)
   u1s <- u1^2
   U <- u2_statistic(D,G)/u1
@@ -916,7 +922,6 @@ Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
   )
 }
 
-Asymp_test(D, G, 'est1')
 
 ######### OR
 
@@ -938,7 +943,7 @@ Asymp_test(D, G, 'est1')
 #   list(statistic = Zobs, p.value = pval)
 # }
 # 
-# Asymp_test(D, G)
+
 
 
 
@@ -946,7 +951,7 @@ Asymp_test(D, G, 'est1')
 ### with Azalini data
 
 estimate_level_asymp <- function(sample_sizes, p, alpha_skew,
-                                 nrep, alpha,
+                                 nrep, alpha, sigma,
                                  ncores = detectCores() - 1) {
   
   # create cluster ONCE
@@ -978,7 +983,7 @@ estimate_level_asymp <- function(sample_sizes, p, alpha_skew,
       #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
       D <- distance_matrix_mv(X)
       G <- distance_matrix_to_flip(X)
-      test <- Asymp_test(D, G, 'est1')
+      test <- Asymp_test(D, G, sigma)
       test$p.value < alpha
     }, mc.cores = ncores)
     
@@ -995,8 +1000,9 @@ set.seed(1)
 
 p <- 3
 alpha_skew <- rep(0, p)
+sigma <- 'est3'
 sample_sizes <- c(50, 60, 70)
-nrep <- 1000     # very small, just for illustration
+nrep <- 100    # very small, just for illustration
 alpha <- 0.05
 
 level_asymp <- estimate_level_asymp(
@@ -1004,7 +1010,8 @@ level_asymp <- estimate_level_asymp(
   p,
   alpha_skew,
   nrep,
-  alpha
+  alpha,
+  sigma
 )
 
 
@@ -1044,21 +1051,3 @@ for(j in 1:length(alpha_seq)){
 my_res
 plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
 abline(h = 0.05, col = 2, lty = 2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
