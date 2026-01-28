@@ -821,6 +821,22 @@ sigma_hat_est2 <- function(D, G) {
 }
 
 
+#### New estimator 3
+
+sigma_hat_est3 <- function(D, G){
+  n <- nrow(D)
+  
+  U2_full <- u2_statistic(D, G)
+  temp <- 0
+  
+  for(j in 1:n){
+    temp <- temp + (u2_statistic(D[-j, -j], G[-j, -j]) - U2_full)^2
+  }
+  (n - 1)*temp/n
+}
+
+
+
 ################## To just check ##############
 nrep <- 200
 n <- 200
@@ -863,7 +879,7 @@ curve(dnorm(x,sd = sd),add =TRUE)
 
 
 
-Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2")) {
+Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
   
   sigma_estimator <- match.arg(sigma_estimator)
   n <- nrow(D)
@@ -877,10 +893,14 @@ Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2")) {
   U2 <- u2_statistic(D, G)
   
   # variance estimation
-  sigma2_hat <- if (sigma_estimator == "est1") {
-    sigma_hat_est1(D, G)
-  } else {
-    sigma_hat_est2(D, G)
+  if (sigma_estimator == "est1") {
+    sigma2_hat <- sigma_hat_est1(D, G)
+  }
+  if (sigma_estimator == "est2") {
+    sigma2_hat <- sigma_hat_est3(D, G)
+  }
+  if (sigma_estimator == "est3") {
+    sigma2_hat <- sigma_hat_est3(D, G)
   }
   
   if (!is.finite(sigma2_hat) || sigma2_hat <= 0)
@@ -988,6 +1008,42 @@ level_asymp <- estimate_level_asymp(
 )
 
 
+
+
+
+
+
+
+
+### A small power experiment added by Joni
+
+
+set.seed(1234)
+n <- 40
+p <- 3
+alpha_seq <- c(0, 0.25, 0.5, 0.75, 1)
+
+iter <- 1000
+
+my_res <- rep(0, length(alpha_seq))
+
+for(j in 1:length(alpha_seq)){
+  res <- t(replicate(iter, {
+    X <- gen_azzalini(n, p, rep(alpha_seq[j], 3))
+    D <- distance_matrix_mv(X)
+    G <- distance_matrix_to_flip(X)
+    
+    Asymp_test(D, G, sigma_estimator = "est3")$p.value
+  }))
+  
+  my_res[j] <- mean(res < 0.05)
+  print(j)
+}
+
+
+my_res
+plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
+abline(h = 0.05, col = 2, lty = 2)
 
 
 
