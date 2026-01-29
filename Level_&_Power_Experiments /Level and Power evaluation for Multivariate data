@@ -433,128 +433,6 @@ p_sdb <- ggplot(df_sdb,
 
 
 
-################################## Power Evaluation ########################
-
-power_fixed_n <- function(
-    n,
-    alpha_grid,
-    nrep,
-    B,
-    alpha,
-    sigma
-) {
-  
-  p <- length(alpha_grid[[1]])
-  xi <- rep(0, p)
-  Omega <- diag(p)
-  
-  power <- matrix(NA, nrow = length(alpha_grid), ncol = 4)
-  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp")
-  
-  for (k in seq_along(alpha_grid)) {
-    
-    alpha_skew <- alpha_grid[[k]]
-    
-    pvals <- replicate(nrep, {
-      
-      X <- gen_azzalini(n, p, alpha_skew)
-      D <- distance_matrix_mv(X)
-      G <- distance_matrix_to_flip(X)
-      
-      c(
-        Metric_perm  = perm_test_metric(X, B),
-        Metric_asymp = Asymp_test(D, G, sigma)$p.value,
-        Mardia_perm  = perm_test_mardia(X, B),
-        Mardia_asymp = asymp_pvalue_mardia(X)
-      )
-    })
-
-    
-    
-    power[k, ] <- rowMeans(pvals < alpha)
-    
-    cat("n =", n,
-        "alpha =", paste(alpha_skew, collapse = ","),
-        "power =", round(power[k, ], 3), "\n")
-  }
-  
-  data.frame(
-    alpha_norm = sapply(alpha_grid, function(a) sqrt(sum(a^2))),
-    power
-  )
-}
-
-
-
-
-alpha_grid <- list(
-  c(0, 0, 0),
-  c(1, 0, 0),
-  c(2, 0, 0),
-  c(3, 0, 0),
-  c(4, 0, 0)
-)
-
-start <- Sys.time()
-
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 10 , B = 500, 0.05,'est3')
-end <- Sys.time()
-
-running_time <- end - start
-
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 10 , B = 50, 0.05,'est3')
-
-
-
-
-df_n20 <- res_n20 |>
-  pivot_longer(
-    cols = -alpha_norm,
-    names_to = "Test",
-    values_to = "Power"
-  ) |>
-  mutate(n = 20)
-
-df_n200 <- res_n200 |>
-  pivot_longer(
-    cols = -alpha_norm,
-    names_to = "Test",
-    values_to = "Power"
-  ) |>
-  mutate(n = 200)
-
-df_power <- bind_rows(df_n20, df_n200)
-
-
-
-ggplot(
-  df_power,
-  aes(x = alpha_norm, y = Power, color = Test)
-) +
-  geom_line(linewidth = 1) +
-  geom_hline(
-    yintercept = 0.05,
-    linetype = "dashed",
-    color = "black",
-    linewidth = 0.7
-  )+
-  geom_point(size = 2) +
-  facet_wrap(~ n, labeller = label_both) +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(
-    x = expression("norm of "* alpha *" (Skewness magnitude)"),
-    y = "Power",
-    title = "Power Comparison under Azzalini Skew-Normal Data"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "bottom",
-    strip.text = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-
-
 
 
 ############## Asymptotic test for Metric Skewness ###########################
@@ -844,37 +722,37 @@ sigma_hat_est3 <- function(D, G){
 
 
 ################## To just check ##############
-nrep <- 200
-n <- 200
-
-# ncores = detectCores() - 1
+# nrep <- 200
+# n <- 200
 # 
-# # create cluster ONCE
-# cl <- makeCluster(ncores)
-# on.exit(stopCluster(cl), add = TRUE)
-
-
-results <- sapply(seq_len(nrep), function(r) {
-  X <- gen_azzalini(n, p, alpha_skew)
-  #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
-  D <- distance_matrix_mv(X)
-  G <- distance_matrix_to_flip(X)
-  u1 <- u1_statistic(D)
-  u1s <- u1^2
-  U <- u2_statistic(D,G)/u1
-  s22 <- sigma_hat(D, G)[2,2]
-  return(c(u1s,
-           U ,
-           s22))
-})
-
-hist(results[2,], freq = FALSE, breaks = 30)
-
-sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
-
-curve(dnorm(x,sd = sd),add =TRUE)
-
-
+# # ncores = detectCores() - 1
+# # 
+# # # create cluster ONCE
+# # cl <- makeCluster(ncores)
+# # on.exit(stopCluster(cl), add = TRUE)
+# 
+# 
+# results <- sapply(seq_len(nrep), function(r) {
+#   X <- gen_azzalini(n, p, alpha_skew)
+#   #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+#   D <- distance_matrix_mv(X)
+#   G <- distance_matrix_to_flip(X)
+#   u1 <- u1_statistic(D)
+#   u1s <- u1^2
+#   U <- u2_statistic(D,G)/u1
+#   s22 <- sigma_hat(D, G)[2,2]
+#   return(c(u1s,
+#            U ,
+#            s22))
+# })
+# 
+# hist(results[2,], freq = FALSE, breaks = 30)
+# 
+# sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
+# 
+# curve(dnorm(x,sd = sd),add =TRUE)
+# 
+# 
 
 
 
@@ -945,10 +823,169 @@ Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
 # 
 
 
+################################## Power Evaluation ########################
+
+power_fixed_n <- function(
+    n,
+    alpha_grid,
+    nrep,
+    B,
+    alpha,
+    sigma
+) {
+  
+  
+  p <- length(alpha_grid[[1]])
+  xi <- rep(0, p)
+  Omega <- diag(p)
+  
+  power <- matrix(NA, nrow = length(alpha_grid), ncol = 4)
+  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp")
+  
+  for (k in seq_along(alpha_grid)) {
+    
+    alpha_skew <- alpha_grid[[k]]
+    
+    ncores = max(1, detectCores() - 1)
+    
+    pvals_list <- mclapply(seq_len(nrep), function(r) {
+      
+      X <- gen_azzalini(n, p, alpha_skew)
+      
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
+      
+      c(
+        Metric_perm  = perm_test_metric(X, B),
+        Metric_asymp = Asymp_test(D, G, sigma)$p.value,
+        Mardia_perm  = perm_test_mardia(X, B),
+        Mardia_asymp = asymp_pvalue_mardia(X)
+      )
+      
+    }, mc.cores = ncores)
+    
+    
+    # convert list → matrix
+    pvals <- do.call(cbind, pvals_list)
+    
+    power[k, ] <- rowMeans(pvals < alpha, na.rm = TRUE)
+    
+    cat("n =", n,
+        "alpha =", paste(alpha_skew, collapse = ","),
+        "power =", round(power[k, ], 3), "\n")
+  }
+  
+  data.frame(
+    alpha_norm = sapply(alpha_grid, function(a) sqrt(sum(a^2))),
+    power
+  )
+}
 
 
 
-### with Azalini data
+
+alpha_grid <- list(
+  c(0, 0, 0),
+  c(1, 0, 0),
+  c(2, 0, 0),
+  c(3, 0, 0),
+  c(4, 0, 0)
+)
+
+start <- Sys.time()
+
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+end <- Sys.time()
+
+running_time <- end - start
+
+start <- Sys.time()
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+end <- Sys.time()
+
+running_time <- end - start
+
+
+df_n20 <- res_n20 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 20)
+
+df_n200 <- res_n200 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 200)
+
+df_power <- bind_rows(df_n20, df_n200)
+
+
+
+ggplot(
+  df_power,
+  aes(x = alpha_norm, y = Power, color = Test)
+) +
+  geom_line(linewidth = 1) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.7
+  )+
+  geom_point(size = 2) +
+  facet_wrap(~ n, labeller = label_both) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = expression("norm of "* alpha *" (Skewness magnitude)"),
+    y = "Power",
+    title = "Power Comparison under Azzalini Skew-Normal Data"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
+### A small power experiment added by Joni
+
+
+# set.seed(1234)
+# n <- 40
+# p <- 3
+# alpha_seq <- c(0, 0.25, 0.5, 0.75, 1)
+# 
+# iter <- 1000
+# 
+# my_res <- rep(0, length(alpha_seq))
+# 
+# for(j in 1:length(alpha_seq)){
+#   res <- t(replicate(iter, {
+#     X <- gen_azzalini(n, p, rep(alpha_seq[j], 3))
+#     D <- distance_matrix_mv(X)
+#     G <- distance_matrix_to_flip(X)
+#     
+#     Asymp_test(D, G, sigma_estimator = "est3")$p.value
+#   }))
+#   
+#   my_res[j] <- mean(res < 0.05)
+#   print(j)
+# }
+# 
+# 
+# my_res
+# plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
+# abline(h = 0.05, col = 2, lty = 2)
+# 
+
+### Level evaluation with Azzalini data
 
 estimate_level_asymp <- function(sample_sizes, p, alpha_skew,
                                  nrep, alpha, sigma,
@@ -1022,32 +1059,3 @@ level_asymp <- estimate_level_asymp(
 
 
 
-### A small power experiment added by Joni
-
-
-set.seed(1234)
-n <- 40
-p <- 3
-alpha_seq <- c(0, 0.25, 0.5, 0.75, 1)
-
-iter <- 1000
-
-my_res <- rep(0, length(alpha_seq))
-
-for(j in 1:length(alpha_seq)){
-  res <- t(replicate(iter, {
-    X <- gen_azzalini(n, p, rep(alpha_seq[j], 3))
-    D <- distance_matrix_mv(X)
-    G <- distance_matrix_to_flip(X)
-    
-    Asymp_test(D, G, sigma_estimator = "est3")$p.value
-  }))
-  
-  my_res[j] <- mean(res < 0.05)
-  print(j)
-}
-
-
-my_res
-plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
-abline(h = 0.05, col = 2, lty = 2)
