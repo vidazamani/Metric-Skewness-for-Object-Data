@@ -1,0 +1,1142 @@
+library(sn)
+library(MASS)
+library(parallel)
+library(patchwork)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# --------------------------------------------------------
+# Function to compute h-hat(p) (Metric skewness)
+# --------------------------------------------------------
+metric_skew <- function(X) {
+  X <- as.matrix(X)
+  n <- nrow(X)
+  M <- ncol(X)
+  
+  ## ---------- Numerator ----------
+  # term_j = -(4/n) * sum_i sum_m x_{j m} x_{i m}
+  # note: sum_i x_{i m} can be precomputed
+  col_sum <- colSums(X)                     # length M
+  term_j <- -(4 / n) * (X %*% col_sum)      # n x 1 vector
+  
+  numerator <- mean(term_j^2)
+  
+  ## ---------- Denominator ----------
+  denom_j <- numeric(n)
+  
+  for (j in 1:n) {
+    diff_sq <- sweep(X, 2, X[j, ], "-")^2   # (x_jm - x_im)^2
+    denom_j[j] <- (1 / n) * sum(diff_sq)
+  }
+  
+  denominator <- mean(denom_j^2)
+  
+  ## ---------- h-hat(p) ----------
+  numerator / denominator
+}
+
+
+
+# --------------------------------------------------------
+# Mardia's multivariate skewness
+# --------------------------------------------------------
+mardia_skewness <- function(X) {
+  X <- as.matrix(X)
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  Xc <- scale(X, center = TRUE, scale = FALSE)
+  S  <- cov(Xc)
+  S_inv <- solve(S)
+  
+  # Mahalanobis inner products
+  A <- Xc %*% S_inv %*% t(Xc)
+  
+  # Mardia's skewness
+  sum(A^3) / n^2
+}
+
+
+###### Mardia Asymptotic ###################################
+
+mardia <- function (X, std = TRUE) 
+{
+  X = as.data.frame(X)
+  dname <- deparse(substitute(X))
+  data <- X[complete.cases(X), ]
+  data <- as.matrix(data)
+  n <- nrow(data)
+  p <- ncol(data)
+  data.org <- data
+  data <- scale(data, scale = FALSE)
+  if (std) {
+    S <- ((n - 1)/n) * cov(data)
+  }
+  else {
+    S <- cov(data)
+  }
+  D <- data %*% solve(S, tol = 1e-25) %*% t(data)
+  g1p <- sum(D^3)/n^2
+  g2p <- sum(diag((D^2)))/n
+  df <- p * (p + 1) * (p + 2)/6
+  k = ((p + 1) * (n + 1) * (n + 3))/(n * ((n + 1) * (p + 1) - 
+                                            6))
+  if (n < 20) {
+    skew <- n * k * g1p/6
+    p.skew <- pchisq(skew, df, lower.tail = FALSE)
+  }
+  else {
+    skew <- n * g1p/6
+    p.skew <- pchisq(skew, df, lower.tail = FALSE)
+  }
+  kurt <- (g2p - p * (p + 2) * (n - 1)/(n + 1)) * sqrt(n/(8 * 
+                                                            p * (p + 2)))
+  p.kurt <- 2 * (1 - pnorm(abs(kurt)))
+  skewMVN = ifelse(p.skew > 0.05, "YES", "NO")
+  kurtoMVN = ifelse(p.kurt > 0.05, "YES", "NO")
+  MVN = ifelse(p.kurt > 0.05 && p.skew > 0.05, "YES", "NO")
+  result <- cbind.data.frame(test = "Mardia", g1p = g1p, chi.skew = skew, 
+                             p.value.skew = p.skew, skewnewss = skewMVN, g2p = g2p, 
+                             z.kurtosis = kurt, p.value.kurt = p.kurt, kurtosis = kurtoMVN, 
+                             MVN = MVN)
+  resultSkewness = cbind.data.frame(Test = "Skewness", Statistic = as.factor(round(skew, 
+                                                                                   4)), `p-value` = as.factor(round(p.skew, 4)), Result = skewMVN)
+  resultKurtosis = cbind.data.frame(Test = "Kurtosis", Statistic = as.factor(round(kurt, 
+                                                                                   4)), `p-value` = as.factor(round(p.kurt, 4)), Result = kurtoMVN)
+  MVNresult = cbind.data.frame(Test = "MV Normality", Statistic = NA, 
+                               `p-value` = NA, Result = MVN)
+  result = rbind.data.frame(resultSkewness, resultKurtosis, 
+                            MVNresult)
+  final <- list(result)
+  names(final) <- c("mv.test")
+  return(final)
+}
+
+
+
+
+
+
+############################################################
+
+# Example: n observations, M variables
+set.seed(1)
+X <- matrix(rnorm(100 * 3), nrow = 100, ncol = 3)
+
+metric_skew(X)
+
+
+
+
+# Example: multivariate normal 
+
+n <- 200
+p <- 3
+
+
+gen_mvn <- function(n, p) {
+  mvrnorm(n, mu = rep(0, p), Sigma = diag(p))
+}
+
+
+metric_skew(gen_mvn(n,p))
+
+# Example: skewed data
+
+##### Azzalini's skew-normal ### you can use power evaluation by using this
+
+n <- 200              # sample size
+p <- 3                # dimension
+## With the parameter alpha, you can control the skewness and 
+## Direction of skewness controlled by sign of alpha
+
+alpha <- c(1, 1, 1)   # skewness (shape) parameter 
+alpha <- rep(0, p)    # zero skewness
+
+
+
+
+gen_azzalini <- function(n, p, alpha) {
+  xi <- rep(0, p)  # location (mean)
+  Omega <- diag(p) # covariance matrix (must be positive definite)
+  
+  rmsn(n , xi , Omega , alpha)
+}
+
+
+
+metric_skew(gen_azzalini(n,p,alpha))
+
+
+# --------------------------------------------------------
+# Sahu-Dey-Branco multivariate skew-normal generator, X ~ SN(xi, Sigma, Lambda)
+# --------------------------------------------------------
+rmsn_sdb <- function(n, xi, Lambda, Sigma) {
+  xi <- as.vector(xi)
+  M  <- length(xi)
+  q  <- ncol(Lambda)
+  
+  if (!all(dim(Lambda) == c(M, q)))
+    stop("Lambda must be M x q")
+  
+  if (!all(dim(Sigma) == c(M, M)))
+    stop("Sigma must be M x M")
+  
+  # latent variables
+  U <- matrix(rnorm(n * q), n, q)
+  U_abs <- abs(U)
+  
+  # Gaussian noise
+  Eps <- MASS::mvrnorm(n, mu = rep(0, M), Sigma = Sigma)
+  
+  # generate X
+  X <- matrix(rep(xi, each = n), n, M) +
+    U_abs %*% t(Lambda) +
+    Eps
+  
+  X
+}
+
+
+n <- 200              # sample size
+p <- 3                # dimension
+
+### with the Lambda you can control the skewness
+Lambda <- matrix(
+  c( 2,  0,
+     0,  1,
+     -1,  1),
+  nrow = p, byrow = TRUE
+)
+
+Lambda <- matrix(0, nrow = p, ncol = 2) # zero skewness
+
+gen_sdb_sym <- function(n, p, Lambda) {
+  xi <- rep(0, p)
+  Sigma <- diag(p)
+  rmsn_sdb(n, xi, Lambda, Sigma) 
+}
+
+
+metric_skew(gen_sdb_sym(n,p,Lambda))
+
+
+
+
+
+# --------------------------------------------------------
+# Permutation test for h-hat(p) (Metric Skewness) = symmetry
+# --------------------------------------------------------
+perm_test_metric <- function(X, B) {
+  
+  X <- as.matrix(X)
+  n <- nrow(X)
+  
+  # observed statistic
+  t_obs <- metric_skew(X)
+  
+  # permutation distribution (row-wise sign flipping)
+  t_perm <- replicate(B, {
+    signs <- sample(c(-1, 1), n, replace = TRUE)
+    X_perm <- X * signs
+    metric_skew(X_perm)
+  })
+  
+  # two-sided p-value
+  mean(abs(t_perm) >= abs(t_obs))
+}
+
+
+
+
+# --------------------------------------------------------
+# permutation test for Mardia's skewness
+# --------------------------------------------------------
+
+perm_test_mardia <- function(X, B) {
+  t_obs <- mardia_skewness(X)
+  n <- nrow(X)
+  
+  t_perm <- replicate(B, {
+    signs <- sample(c(-1, 1), n, replace = TRUE)
+    mardia_skewness(X * signs)
+  })
+  
+  mean(t_perm >= t_obs)
+}
+
+# --------------------------------------------------------
+# Asymptotic test for Mardia multivariate skewness
+# --------------------------------------------------------
+
+
+asymp_pvalue_mardia <- function(X) {
+  
+  as.numeric(as.vector(mardia(X)$mv.test$`p-value`)[1])
+  
+}
+
+X <- gen_azzalini(n,p,rep(0,p))
+
+asymp_pvalue_mardia(X)
+
+###################################################################################
+
+###################################################################################
+
+# --------------------------------------------------------
+# Parallel level test for different data generator
+# --------------------------------------------------------
+level_test_parallel <- function(gen_fun, sample_sizes,
+                                nrep, B,
+                                alpha, p,
+                                alpha_skew,
+                                ncores = detectCores() - 1) {
+  
+  # create cluster ONCE
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)
+  
+  # load needed packages on workers
+  clusterEvalQ(cl, {
+    library(MASS,sn)
+  })
+  
+  # export functions & objects used by workers
+  clusterExport(
+    cl,
+    c("gen_fun","perm_test_metric", "perm_test_mardia",
+      "metric_skew", "mardia_skewness", "B", "p",'n','rmsn_sdb','rmsn','asymp_pvalue_mardia',
+      'mardia'),
+    envir = environment()
+  )
+  
+  results_hhat   <- numeric(length(sample_sizes))
+  results_mardia <- numeric(length(sample_sizes))
+  results_mardia_asym <- numeric(length(sample_sizes))
+  
+  for (i in seq_along(sample_sizes)) {
+    
+    n <- sample_sizes[i]
+    
+    pvals <- parSapply(cl, seq_len(nrep), function(r) {
+      
+      X <- gen_fun(n, p, alpha_skew)
+      
+      c(
+        perm_test_metric(X, B),
+        perm_test_mardia(X, B),
+        asymp_pvalue_mardia(X)
+      )
+    })
+    
+    results_hhat[i]   <- mean(pvals[1, ] < alpha)
+    results_mardia[i] <- mean(pvals[2, ] < alpha)
+    results_mardia_asym[i] <- mean(pvals[3, ] < alpha)
+    
+    
+    cat("Done n =", n,
+        "| hhat:", round(results_hhat[i], 3),
+        "| mardia:", round(results_mardia[i], 3), 
+        "| mardia_asym:", round(results_mardia_asym[i], 3),"\n")
+  }
+  
+  list(
+    sample_sizes = sample_sizes,
+    hhat = results_hhat,
+    mardia = results_mardia,
+    mardia_asym = results_mardia_asym
+  )
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+set.seed(1)
+
+## Parameters 
+sample_sizes <- seq(20, 300, 40)
+nrep = 1000
+B = 500
+alpha = 0.05
+p = 3
+
+
+
+# res <- level_test_parallel(
+#   gen_fun = gen_mvn,
+#   sample_sizes = sample_sizes,
+#   nrep = 2,
+#   B = 500,
+#   alpha = 0.05,
+#   p = 3
+# )
+
+start <- Sys.time()
+
+
+res_sdb <- level_test_parallel(
+  gen_fun = gen_sdb_sym,
+  sample_sizes = sample_sizes,
+  nrep,
+  B,
+  alpha ,
+  p,
+  alpha_skew = matrix(0, nrow = p, ncol = 2)
+)
+
+
+res_az <- level_test_parallel(
+  gen_fun = gen_azzalini,
+  sample_sizes = sample_sizes,
+  nrep,
+  B,
+  alpha,
+  p,
+  alpha_skew = c(rep(0,p))
+)
+
+
+end <- Sys.time()
+
+running_time <- end - start
+
+#### Visualization
+
+df_az <- tibble(
+  n = res_az$sample_sizes,
+  Metric_perm = res_az$hhat,
+  Mardia_perm = res_az$mardia,
+  Mardai_Asym = res_az$mardia_asym
+) |>
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
+  mutate(Dataset = "Azzalini")
+
+df_sdb <- tibble(
+  n = res_sdb$sample_sizes,
+  Metric_perm = res_sdb$hhat,
+  Mardia_perm = res_sdb$mardia,
+  Mardai_Asym = res_sdb$mardia_asym
+) |>
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
+  mutate(Dataset = "SDB")
+
+df_all <- bind_rows(df_az, df_sdb)
+
+
+
+p_az <- ggplot(df_az,
+               aes(x = n, y = Rejection,
+                   color = Statistic, shape = Statistic)) +
+  geom_line(linewidth = 0.9, linetype = 'solid') +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("black", "blue",'green')) +
+  scale_shape_manual(values = c(19, 17,18)) +
+  labs(
+    title = "Level Evaluation (Azzalini Data)",
+    x = "Sample Size",
+    y = expression("Proportion of Rejection (p < " * alpha * ")")
+  ) + 
+  ylim(0, 0.1) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+
+p_sdb <- ggplot(df_sdb,
+                aes(x = n, y = Rejection,
+                    color = Statistic, shape = Statistic)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("black", "blue",'green')) +
+  scale_shape_manual(values = c(19, 17,18)) +
+  labs(
+    title = "Level Evaluation (SDB Data)",
+    x = "Sample Size",
+    y = expression("Proportion of Rejection (p < " * alpha * ")")
+  ) +  
+  ylim(0, 0.1) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+
+
+
+
+(p_az | p_sdb) +
+  plot_layout(guides = "collect") &
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 11),
+    legend.key.width = unit(1.3, "cm"),
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
+
+
+############## Asymptotic test for Metric Skewness ###########################
+
+distance_matrix_mv <- function(X) {
+  # X: n x d matrix
+  n <- nrow(X)
+  D <- matrix(0, n, n)
+  
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      d2 <- sum((X[i, ] - X[j, ])^2)
+      D[i, j] <- d2
+      D[j, i] <- d2
+    }
+  }
+  
+  D
+}
+
+
+distance_matrix_to_flip <- function(X) {
+  n <- nrow(X)
+  Dflip <- matrix(0, n, n)
+  
+  for (i in 1:n) {
+    Xi <- X[i, ]
+    for (j in 1:n) {
+      Dflip[i, j] <- sum((Xi + X[j, ])^2)
+    }
+  }
+  
+  Dflip
+}
+
+
+
+
+u1_statistic <- function(D) {
+  n <- nrow(D)
+  total <- 0
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij <- D[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik <- D[i, k]
+        Djk <- D[j, k]
+        
+        total <- total +
+          Dij * Dik +
+          Djk * Dij +
+          Dik * Djk
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+
+
+u2_statistic <- function(D, G) {
+  n <- nrow(D)
+  total <- 0
+  
+  if (n < 3) {
+    stop("U2 statistic requires at least n >= 3 observations.")
+  }
+  
+  stopifnot(
+    is.matrix(D), is.matrix(G),
+    nrow(D) == ncol(D),
+    nrow(G) == ncol(G),
+    nrow(D) == nrow(G)
+  )
+  
+  total <- 0
+  
+  
+  for (i in 1:(n - 2)) {
+    for (j in (i + 1):(n - 1)) {
+      Dij <- D[i, j] - G[i, j]
+      
+      for (k in (j + 1):n) {
+        Dik <- D[i, k] - G[i, k]
+        Djk <- D[j, k] - G[j, k]
+        
+        total <- total +
+          Dij * Dik +   # r(i, j, k)
+          Djk * Dij +   # r(j, k, i)
+          Dik * Djk     # r(k, i, j)
+      }
+    }
+  }
+  
+  total / (3 * choose(n, 3))
+}
+
+
+
+
+asymptotic_metric_skewness <- function(D, G) {
+  
+  n <- nrow(D)
+  
+  # U-statistics of order 3 require n >= 3
+  if (n < 3) return(NA_real_)
+  
+  U1 <- u1_statistic(D)
+  U2 <- u2_statistic(D, G)
+  
+  # Guard against division by zero or numerical degeneracy
+  if (!is.finite(U1) || abs(U1) < .Machine$double.eps) {
+    return(NA_real_)
+  }
+  
+  list(metric_skew = (U2 / U1), u1 = U1, u2 = U2)
+}
+
+#### example
+
+set.seed(1)
+n <- 100
+d <- 3
+
+X <- matrix(rnorm(n * d), n, d)
+
+
+
+D <- distance_matrix_mv(X)
+G <- distance_matrix_to_flip(X)
+
+metric_skew_asym <- asymptotic_metric_skewness(D, G)
+metric_skew_asym
+
+
+#### Variace 
+
+s1_kernel <- function(j, k, l, D) {
+  (D[j, k] * D[j, l] +
+     D[k, l] * D[k, j] +
+     D[l, j] * D[l, k]) / 3
+}
+
+s2_kernel <- function(j, k, l, D, G) {
+  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
+  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
+  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
+  
+  (r_jkl + r_klj + r_ljk) / 3
+}
+
+############# 1st option ######################
+
+# s_hat_j <- function(j, D, G, p) {
+#   n <- nrow(D)
+#   
+#   if (n < 3) return(NA_real_)
+#   
+#   idx <- setdiff(seq_len(n), j)
+#   denom <- choose(n - 1, 2)
+#   total <- 0
+#   
+#   for (a in 1:(length(idx) - 1)) {
+#     for (b in (a + 1):length(idx)) {
+#       k <- idx[a]
+#       l <- idx[b]
+#       
+#       if (p == 1) {
+#         total <- total + s1_kernel(j, k, l, D)
+#       } else if (p == 2) {
+#         total <- total + s2_kernel(j, k, l, D, G)
+#       }
+#     }
+#   }
+#   
+#   total / denom
+# }
+
+############ 2nd option #######################
+
+s_hat_j <- function(j, D, G, p) {
+  n <- nrow(D)
+  if (n < 3) return(NA_real_)
+  
+  idx <- setdiff(seq_len(n), j)
+  denom <- choose(n - 1, 2)
+  total <- 0
+  
+  for (k in idx) {
+    
+    for (l in setdiff(seq(k, n), j)) {   # <-- k <= l
+      
+      if (p == 1) {
+        total <- total + s1_kernel(j, k, l, D)
+      } else if (p == 2) {
+        total <- total + s2_kernel(j, k, l, D, G)
+      }
+    }
+  }
+  
+  total / denom
+}
+
+################################################
+
+s_hat_vector <- function(D, G, p) {
+  n <- nrow(D)
+  
+  vapply(
+    seq_len(n),
+    function(j) s_hat_j(j, D, G, p),
+    numeric(1)
+  )
+}
+
+
+sigma_hat <- function(D, G) {
+  
+  
+  n <- nrow(D)
+  
+  if (n < 3) return(matrix(NA_real_, 2, 2))
+  
+  s1 <- s_hat_vector(D, p = 1)
+  s2 <- s_hat_vector(D, G, p = 2)
+  
+  s1c <- s1 - mean(s1)
+  s2c <- s2 - mean(s2)
+  
+  sigma <- matrix(0, 2, 2)
+  
+  sigma[1, 1] <- mean(s1c * s1c)
+  sigma[1, 2] <- mean(s1c * s2c)
+  sigma[2, 1] <- sigma[1, 2]
+  sigma[2, 2] <- mean(s2c * s2c)
+  
+  sigma
+}
+
+
+
+
+sigma_hat(D, G)
+
+#### New estimator 1
+sigma_hat_est1 <- function(D, G) {
+  s2 <- s_hat_vector(D, G, p = 2)
+  if (anyNA(s2)) return(NA_real_)
+  mean(s2^2)
+}
+
+
+#### New estimator 2
+
+sigma_hat_est2 <- function(D, G) {
+  s2 <- s_hat_vector(D, G, p = 2)
+  if (anyNA(s2)) return(NA_real_)
+  
+  n <- length(s2)
+  psi <- numeric(n)
+  
+  for (i in seq_len(n)) {
+    psi[i] <- mean(s2[-i])
+  }
+  
+  mean(psi^2)
+}
+
+
+#### New estimator 3
+
+sigma_hat_est3 <- function(D, G){
+  n <- nrow(D)
+  
+  U2_full <- u2_statistic(D, G)
+  temp <- 0
+  
+  for(j in 1:n){
+    temp <- temp + (u2_statistic(D[-j, -j], G[-j, -j]) - U2_full)^2
+  }
+  (n - 1)*temp/n
+}
+
+
+
+################## To just check ##############
+# nrep <- 200
+# n <- 200
+# 
+# # ncores = detectCores() - 1
+# # 
+# # # create cluster ONCE
+# # cl <- makeCluster(ncores)
+# # on.exit(stopCluster(cl), add = TRUE)
+# 
+# 
+# results <- sapply(seq_len(nrep), function(r) {
+#   X <- gen_azzalini(n, p, alpha_skew)
+#   #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+#   D <- distance_matrix_mv(X)
+#   G <- distance_matrix_to_flip(X)
+#   u1 <- u1_statistic(D)
+#   u1s <- u1^2
+#   U <- u2_statistic(D,G)/u1
+#   s22 <- sigma_hat(D, G)[2,2]
+#   return(c(u1s,
+#            U ,
+#            s22))
+# })
+# 
+# hist(results[2,], freq = FALSE, breaks = 30)
+# 
+# sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
+# 
+# curve(dnorm(x,sd = sd),add =TRUE)
+# 
+# 
+
+
+
+
+
+
+#### Asymptotic Test
+
+
+
+Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
+  
+  sigma_estimator <- match.arg(sigma_estimator)
+  n <- nrow(D)
+  
+  if (n < 3)
+    return(list(statistic = NA, p.value = NA))
+  
+  
+  
+  # U2 statistic
+  U2 <- u2_statistic(D, G)
+  
+  # variance estimation
+  if (sigma_estimator == "est1") {
+    sigma2_hat <- sigma_hat_est1(D, G)
+  }
+  if (sigma_estimator == "est2") {
+    sigma2_hat <- sigma_hat_est3(D, G)
+  }
+  if (sigma_estimator == "est3") {
+    sigma2_hat <- sigma_hat_est3(D, G)
+  }
+  
+  if (!is.finite(sigma2_hat) || sigma2_hat <= 0)
+    return(list(statistic = NA, p.value = NA))
+  
+  Z <- sqrt(n) * (U2) / (3 * sqrt(sigma2_hat))
+  pval <- 1 - pnorm(Z)
+  
+  list(
+    statistic = Z,
+    p.value = pval,
+    method = sigma_estimator
+  )
+}
+
+
+######### OR
+
+
+# Asymp_test <- function(D, G) {
+#   
+#   n <- nrow(D)
+#   
+#   
+#   
+#   sigma_h <- sigma_hat(D, G)
+#   sigma22  <- sigma_h[2,2]
+#   
+#   Zobs <- sqrt(n) * (asymptotic_metric_skewness(D, G)$u2)/(asymptotic_metric_skewness(D, G)$u1)
+#   sdZ  <- sqrt((9 * sigma22) / (asymptotic_metric_skewness(D, G)$u1)^2)
+#   
+#   pval <- 1 - pnorm(Zobs, mean = 0, sd = sdZ)
+#   
+#   list(statistic = Zobs, p.value = pval)
+# }
+# 
+
+
+################################## Power Evaluation ########################
+
+power_fixed_n <- function(
+    n,
+    alpha_grid,
+    nrep,
+    B,
+    alpha,
+    sigma
+) {
+  
+  
+  p <- length(alpha_grid[[1]])
+  xi <- rep(0, p)
+  Omega <- diag(p)
+  
+  power <- matrix(NA, nrow = length(alpha_grid), ncol = 4)
+  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp")
+  
+  for (k in seq_along(alpha_grid)) {
+    
+    alpha_skew <- alpha_grid[[k]]
+    
+    ncores = max(1, detectCores() - 1)
+    
+    pvals_list <- mclapply(seq_len(nrep), function(r) {
+      
+      X <- gen_azzalini(n, p, alpha_skew)
+      
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
+      
+      c(
+        Metric_perm  = perm_test_metric(X, B),
+        Metric_asymp = Asymp_test(D, G, sigma)$p.value,
+        Mardia_perm  = perm_test_mardia(X, B),
+        Mardia_asymp = asymp_pvalue_mardia(X)
+      )
+      
+    }, mc.cores = ncores)
+    
+    
+    # convert list → matrix
+    pvals <- do.call(cbind, pvals_list)
+    
+    power[k, ] <- rowMeans(pvals < alpha, na.rm = TRUE)
+    
+    cat("n =", n,
+        "alpha =", paste(alpha_skew, collapse = ","),
+        "power =", round(power[k, ], 3), "\n")
+  }
+  
+  data.frame(
+    alpha_norm = sapply(alpha_grid, function(a) sqrt(sum(a^2))),
+    power
+  )
+}
+
+
+
+
+alpha_grid <- list(
+  c(0, 0, 0),
+  c(1, 0, 0),
+  c(2, 0, 0),
+  c(3, 0, 0),
+  c(4, 0, 0)
+)
+
+start <- Sys.time()
+
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+end <- Sys.time()
+
+running_time <- end - start
+
+start <- Sys.time()
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+end <- Sys.time()
+
+running_time <- end - start
+
+
+df_n20 <- res_n20 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 20)
+
+df_n200 <- res_n200 |>
+  pivot_longer(
+    cols = -alpha_norm,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 200)
+
+df_power <- bind_rows(df_n20, df_n200)
+
+
+
+ggplot(
+  df_power,
+  aes(x = alpha_norm, y = Power, color = Test)
+) +
+  geom_line(linewidth = 1) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.7
+  )+
+  geom_point(size = 2) +
+  facet_wrap(~ n, labeller = label_both) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = expression("norm of "* alpha *" (Skewness magnitude)"),
+    y = "Power",
+    title = "Power Comparison under Azzalini Skew-Normal Data"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
+### A small power experiment added by Joni
+
+
+set.seed(1234)
+n <- 200
+p <- 3
+alpha_seq <- c(0, 0.25, 0.5, 0.75, 1)
+
+iter <- 1000
+
+my_res <- rep(0, length(alpha_seq))
+
+for(j in 1:length(alpha_seq)){
+  res <- t(replicate(iter, {
+    X <- gen_azzalini(n, p, rep(alpha_seq[j], 3))
+    D <- distance_matrix_mv(X)
+    G <- distance_matrix_to_flip(X)
+
+    Asymp_test(D, G, sigma_estimator = "est3")$p.value
+  }))
+
+  my_res[j] <- mean(res < 0.05)
+  print(j)
+}
+
+
+my_res
+plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
+abline(h = 0.05, col = 2, lty = 2)
+
+
+### Level evaluation with Azzalini data
+
+estimate_level_asymp <- function(sample_sizes, p, alpha_skew,
+                                 nrep, alpha, sigma,
+                                 ncores = detectCores() - 1) {
+  
+  # create cluster ONCE
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)
+  
+  # load needed packages on workers
+  clusterEvalQ(cl, {
+    library(MASS,sn)
+  })
+  
+  # export functions & objects used by workers
+  clusterExport(
+    cl,
+    c("u1_statistic","u2_statistic", "metric_skew_asym",
+      "s1_kernel", "s2_kernel", "D", "G",'sample_sizes','s_hat_j','sigma_hat','Asymp_test',
+      's_hat_vector', 'distance_matrix_mv', 'distance_matrix_to_flip', 'gen_azzalini',
+      'alpha_skew'),
+    envir = environment()
+  )
+  
+  proportions <- numeric(length(sample_sizes))
+  
+  for (k in seq_along(sample_sizes)) {
+    n <- sample_sizes[k]
+    
+    results <- mclapply(seq_len(nrep), function(r) {
+      X <- gen_azzalini(n, p, alpha_skew)
+      #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
+      D <- distance_matrix_mv(X)
+      G <- distance_matrix_to_flip(X)
+      test <- Asymp_test(D, G, sigma)
+      test$p.value < alpha
+    }, mc.cores = ncores)
+    
+    proportions[k] <- mean(unlist(results))
+    cat(sprintf("n=%d -> rejection proportion = %.3f\n",
+                n, proportions[k]))
+  }
+  
+  list(sample_sizes = sample_sizes, proportions = proportions)
+}
+
+
+set.seed(1)
+
+p <- 3
+alpha_skew <- rep(0, p)
+sigma <- 'est3'
+sample_sizes <- c(50, 60, 70)
+nrep <- 100    # very small, just for illustration
+alpha <- 0.05
+
+level_asymp <- estimate_level_asymp(
+  sample_sizes,
+  p,
+  alpha_skew,
+  nrep,
+  alpha,
+  sigma
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
