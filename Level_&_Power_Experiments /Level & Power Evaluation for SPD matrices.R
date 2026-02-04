@@ -556,8 +556,9 @@ power_fixed_n <- function(
     nrep,
     B,
     alpha,
-    sigma
+    sigma = c("est1", "est2", "est3")
 ) {
+  
   
   
   ncores = detectCores() - 1
@@ -595,10 +596,22 @@ power_fixed_n <- function(
       "rorth",
       'pnorm',
       'n',
-      "B", "dim", "sig", 'mu_skew' ,'distcov'
+      "B", "dim", "sig" ,'distcov'
     ),
     envir = environment()
   )
+  
+  sigma <- match.arg(sigma)
+  
+  if (sigma == "est1") {
+    sigma <- "est1"
+  }
+  if (sigma == "est2") {
+    sigma <- "est2"
+  }
+  if (sigma == "est3") {
+    sigma <- "est3"
+  }
   
   
   power <- matrix(NA, nrow = length(mu), ncol = 2)
@@ -619,7 +632,7 @@ power_fixed_n <- function(
       
       c(
         Metric_perm  = Perm_test(mats, B,2,0)$p_value,
-        Metric_asymp = Asymp_test(D, G, 'est3')$p.value
+        Metric_asymp = Asymp_test(D, G, sigma)$p.value
       )
       
     })
@@ -647,21 +660,25 @@ power_fixed_n <- function(
 mu <- seq(0,0.05,0.01)
 dim <- 3
 sig <- 0.05
+sigma <- 'est3'
+nrep <- 1000
+B <- 500
+
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
+res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, sig, sigma)
 end <- Sys.time()
 
 running_time <- end - start
 
 
 start <- Sys.time()
-res_n50 <- power_fixed_n(n = 50, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
+res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig, sigma)
 end <- Sys.time()
 
 start <- Sys.time()
-res_n100 <- power_fixed_n(n = 100, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
+res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig, sigma)
 end <- Sys.time()
 
 running_time <- end - start
