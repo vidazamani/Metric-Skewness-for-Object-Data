@@ -40,12 +40,11 @@ stress_files <- grep("stress", all_files, value = TRUE)
 
 
 ######################################################################
-#### In this part, a data frame per each patient is created 
+#### In this part, a list of data frames per each patient is created 
 
 
 rest_data   <- lapply(rest_files, read_with_organs)
 stress_data <- lapply(stress_files, read_with_organs)
-
 
 
 #######################################################################
@@ -177,7 +176,7 @@ make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
   
   ################################## FDA #######################
   
-
+  
   ft_rest <- Data2fd(
     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
@@ -471,7 +470,6 @@ title('2nd pic with smoothing')
 
 # pca_fd <- pca.fd(ft, nharm = 3)   # 3  (principal components)
 # plot.pca.fd(pca_fd, harm = 1:2)
-
 
 
 
