@@ -117,7 +117,7 @@ Perm_test <- function(matrices, iter, seed, regularize){
     }
     Tperm[b] <- metric_skew_fun(perm_sample)
   }
-
+  
   
   
   
@@ -167,7 +167,7 @@ distance_matrix_to_inverse <- function(mats) {
     Xi <- mats[, , i]
     for (j in i:n) {
       d2 <- distcov(Xi, inv_mats[, , j],
-                method = "LogEuclidean")^2
+                    method = "LogEuclidean")^2
       
       Dinv[i, j] <- d2
       Dinv[j, i] <- d2
@@ -520,7 +520,7 @@ Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
     sigma2_hat <- sigma_hat_est1(D, G)
   }
   if (sigma_estimator == "est2") {
-    sigma2_hat <- sigma_hat_est3(D, G)
+    sigma2_hat <- sigma_hat_est2(D, G)
   }
   if (sigma_estimator == "est3") {
     sigma2_hat <- sigma_hat_est3(D, G)
@@ -544,7 +544,7 @@ Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
 
 
 
-Asymp_test(D, G,'est3')
+Asymp_test(D, G,'est2')
 
 ################################## Power Evaluation ########################
 
@@ -561,17 +561,56 @@ power_fixed_n <- function(
   
   
   ncores = detectCores() - 1
+  # create cluster ONCE
+  cl <- makeCluster(ncores)
+  on.exit(stopCluster(cl), add = TRUE)
+  
+  # load needed packages on workers
+  clusterEvalQ(cl, {
+    library(MASS,sn)
+  })
+  
+  # export functions & objects used by workers
+  clusterExport(
+    cl,
+    c(
+      "generate_matrices",
+      'metric_skew_fun',
+      "distance_matrix",
+      'invert_matrices',
+      "distance_matrix_to_inverse",
+      'average_squared_distances',
+      'average_squared_distances_inverted',
+      "Perm_test",
+      "Asymp_test",
+      'u1_statistic',
+      'u2_statistic',
+      'asymptotic_metric_skewness',
+      "s_hat_j",
+      "s1_kernel",
+      's2_kernel',
+      "sigma_hat_est1",
+      "sigma_hat_est2",
+      "sigma_hat_est3",
+      "rorth",
+      'pnorm',
+      'n',
+      "B", "dim", "sig", 'mu_skew' ,'distcov'
+    ),
+    envir = environment()
+  )
+  
   
   power <- matrix(NA, nrow = length(mu), ncol = 2)
   colnames(power) <- c("Metric_perm", "Metric_asymp")
   
   for (k in seq_along(mu)) {
     
-    mu_skew <- mu[[k]]
+    mu_skew <- mu[k]
     
-    
-    
-    pvals_list <- mclapply(seq_len(nrep), function(r) {
+
+    pvals <- parSapply(cl, seq_len(nrep), function(r) {
+      
       
       mats <- generate_matrices(n, dim, mu_skew, sig)
       
@@ -580,14 +619,14 @@ power_fixed_n <- function(
       
       c(
         Metric_perm  = Perm_test(mats, B,2,0)$p_value,
-        Metric_asymp = Asymp_test(D, G, sigma)$p.value
+        Metric_asymp = Asymp_test(D, G, 'est3')$p.value
       )
       
-    }, mc.cores = ncores)
+    })
     
     
-    # convert list → matrix
-    pvals <- do.call(cbind, pvals_list)
+    
+    
     
     power[k, ] <- rowMeans(pvals < alpha, na.rm = TRUE)
     
@@ -605,19 +644,24 @@ power_fixed_n <- function(
 
 
 
-mu <- seq(0,5,1)
+mu <- seq(0,0.05,0.01)
 dim <- 3
 sig <- 0.05
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, dim, mu = mu, sig, nrep = 1000 , B = 500, 0.05,'est3')
+res_n20  <- power_fixed_n(n = 20, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
 end <- Sys.time()
 
 running_time <- end - start
 
+
 start <- Sys.time()
-res_n200 <- power_fixed_n(n = 200, dim, mu = mu, sig, nrep = 1000 , B = 500, 0.05,'est3')
+res_n50 <- power_fixed_n(n = 50, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
+end <- Sys.time()
+
+start <- Sys.time()
+res_n100 <- power_fixed_n(n = 100, dim, mu = mu, sig, nrep = 10 , B = 5, 0.05,'est3')
 end <- Sys.time()
 
 running_time <- end - start
@@ -631,15 +675,23 @@ df_n20 <- res_n20 |>
   ) |>
   mutate(n = 20)
 
-df_n200 <- res_n200 |>
+df_n50 <- res_n50 |>
   pivot_longer(
     cols = -mu,
     names_to = "Test",
     values_to = "Power"
   ) |>
-  mutate(n = 200)
+  mutate(n = 50)
 
-df_power <- bind_rows(df_n20, df_n200)
+df_n100 <- res_n100 |>
+  pivot_longer(
+    cols = -mu,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 100)
+
+df_power <- bind_rows(df_n20, df_n50, df_n100)
 
 
 
@@ -658,9 +710,9 @@ ggplot(
   facet_wrap(~ n, labeller = label_both) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
-    x = expression("norm of "* alpha *" (Skewness magnitude)"),
+    x = expression("mu"),
     y = "Power",
-    title = "Power Comparison under Azzalini Skew-Normal Data"
+    title = "Power Comparison under Cov matrices Data"
   ) +
   theme_minimal(base_size = 13) +
   theme(
