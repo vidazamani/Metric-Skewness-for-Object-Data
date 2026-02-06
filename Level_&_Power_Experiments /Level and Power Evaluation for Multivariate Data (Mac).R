@@ -261,7 +261,60 @@ distance_matrix_to_flip <- function(X) {
 }
 
 
+#### Kernels 
 
+s1_kernel <- function(j, k, l, D) {
+  (D[j, k] * D[j, l] +
+     D[k, l] * D[k, j] +
+     D[l, j] * D[l, k]) / 3
+}
+
+s2_kernel <- function(j, k, l, D, G) {
+  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
+  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
+  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
+  
+  (r_jkl + r_klj + r_ljk) / 3
+}
+
+############ s_hat_j #######################
+
+s_hat_j <- function(j, D, G, p) {
+  n <- nrow(D)
+  if (n < 3) return(NA_real_)
+  
+  idx <- setdiff(seq_len(n), j)
+  denom <- choose(n - 1, 2)
+  total <- 0
+  
+  for (k in idx) {
+    
+    for (l in setdiff(seq(k, n), j)) {   # <-- L >= K
+      
+      if (p == 1) {
+        total <- total + s1_kernel(j, k, l, D)
+      } else if (p == 2) {
+        total <- total + s2_kernel(j, k, l, D, G)
+      }
+    }
+  }
+  
+  total / denom
+}
+
+################################################
+
+s_hat_vector <- function(D, G, p) {
+  n <- nrow(D)
+  
+  vapply(
+    seq_len(n),
+    function(j) s_hat_j(j, D, G, p),
+    numeric(1)
+  )
+}
+
+##### U statistics 
 
 u1_statistic <- function(D) {
   n <- nrow(D)
@@ -326,9 +379,6 @@ u2_statistic <- function(D, G) {
 }
 
 
-
-
-
 #### example
 
 set.seed(1)
@@ -346,98 +396,6 @@ U2_cpp <- u2_statistic_rcpp(D, G)
 U2_r   <- u2_statistic(D, G)
 
 all.equal(U2_cpp, U2_r)
-
-#### Variace 
-
-s1_kernel <- function(j, k, l, D) {
-  (D[j, k] * D[j, l] +
-     D[k, l] * D[k, j] +
-     D[l, j] * D[l, k]) / 3
-}
-
-s2_kernel <- function(j, k, l, D, G) {
-  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
-  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
-  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
-  
-  (r_jkl + r_klj + r_ljk) / 3
-}
-
-############ s_hat_j #######################
-
-s_hat_j <- function(j, D, G, p) {
-  n <- nrow(D)
-  if (n < 3) return(NA_real_)
-  
-  idx <- setdiff(seq_len(n), j)
-  denom <- choose(n - 1, 2)
-  total <- 0
-  
-  for (k in idx) {
-    
-    for (l in setdiff(seq(k, n), j)) {   # <-- L >= K
-      
-      if (p == 1) {
-        total <- total + s1_kernel(j, k, l, D)
-      } else if (p == 2) {
-        total <- total + s2_kernel(j, k, l, D, G)
-      }
-    }
-  }
-  
-  total / denom
-}
-
-################################################
-
-s_hat_vector <- function(D, G, p) {
-  n <- nrow(D)
-  
-  vapply(
-    seq_len(n),
-    function(j) s_hat_j(j, D, G, p),
-    numeric(1)
-  )
-}
-
-
-
-
-################## To just check ##############
-# nrep <- 200
-# n <- 200
-# 
-# # ncores = detectCores() - 1
-# # 
-# # # create cluster ONCE
-# # cl <- makeCluster(ncores)
-# # on.exit(stopCluster(cl), add = TRUE)
-# 
-# 
-# results <- sapply(seq_len(nrep), function(r) {
-#   X <- gen_azzalini(n, p, alpha_skew)
-#   #or# X <- matrix(rnorm(sample_sizes * p), sample_sizes, p)
-#   D <- distance_matrix_mv(X)
-#   G <- distance_matrix_to_flip(X)
-#   u1 <- u1_statistic(D)
-#   u1s <- u1^2
-#   U <- u2_statistic(D,G)/u1
-#   s22 <- sigma_hat(D, G)[2,2]
-#   return(c(u1s,
-#            U ,
-#            s22))
-# })
-# 
-# hist(results[2,], freq = FALSE, breaks = 30)
-# 
-# sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
-# 
-# curve(dnorm(x,sd = sd),add =TRUE)
-# 
-# 
-
-
-
 
 
 
@@ -488,20 +446,22 @@ Asymp_metric_test <- function(X) {
   trSigma2 <- sum(theta_sq)
   
   # 5) Test statistic
-  Tn <- (n * U2 + trSigma2) / 16
+  
+  Tn <- ((n * U2) / 16) + trSigma2
+  
   
   # # 6) CDF via Imhof
   # cdf_val <- imhof_cdf(Tn, theta_sq)
   # 
   # pval <- 1 - cdf_val
-  # 
+
   
   # 6) CDF via Imhof
   cdf_val <- imhof_cdf(Tn, theta_sq)
-  
+
   # two-sided p-value
   pval <- 2 * min(cdf_val, 1 - cdf_val)
-  
+
   # keep within [0,1] numerically
   pval <- min(max(pval, 0), 1)
   
@@ -514,7 +474,7 @@ Asymp_metric_test <- function(X) {
   )
 }
 
-X <- gen_azzalini(n = 100, p = 3, alpha = c(0, 0, 0))
+X <- gen_azzalini(n = 100, p = 3, alpha = c(1, 0, 0))
 Asymp_metric_test(X)
 
 
@@ -664,8 +624,7 @@ level_test_parallel <- function(gen_fun,
                                       B,
                                       alpha,
                                       p,
-                                      alpha_skew,
-                                      sigma) {
+                                      alpha_skew) {
   
   # for reproducibility across forked processes
   RNGkind("L'Ecuyer-CMRG")
@@ -687,12 +646,11 @@ level_test_parallel <- function(gen_fun,
       
       X <- gen_fun(n, p, alpha_skew)
       
-      D <- distance_matrix_mv(X)
-      G <- distance_matrix_to_flip(X)
+      
       
       c(
         metric_perm  = perm_test_metric(X, B),
-        metric_asym  = Asymp_test(D, G, sigma)$p.value,
+        metric_asym  = Asymp_metric_test(X)$p.value,
         mardia_perm  = perm_test_mardia(X, B),
         mardia_asym  = asymp_pvalue_mardia(X)
       )
@@ -737,11 +695,10 @@ set.seed(1)
 
 ## Parameters 
 sample_sizes <- seq(50,150,20)
-nrep = 10
-B = 10
+nrep = 1000
+B = 500
 alpha = 0.05
 p = 3
-sigma <- 'est3'
 
 
 # res <- level_test_parallel(
@@ -763,8 +720,7 @@ res_sdb <- level_test_parallel(
   B,
   alpha ,
   p,
-  alpha_skew = matrix(0, nrow = p, ncol = 2),
-  sigma
+  alpha_skew = matrix(0, nrow = p, ncol = 2)
 )
 
 
@@ -775,8 +731,7 @@ res_az <- level_test_parallel(
   B,
   alpha,
   p,
-  alpha_skew = c(rep(0,p)),
-  sigma
+  alpha_skew = c(rep(0,p))
 )
 
 
@@ -824,7 +779,7 @@ p_az <- ggplot(df_az,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   ) + 
-  ylim(0, 0.9) +
+  ylim(0, 0.1) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
@@ -846,7 +801,7 @@ p_sdb <- ggplot(df_sdb,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   ) +  
-  ylim(0, 0.9) +
+  ylim(0, 0.1) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
