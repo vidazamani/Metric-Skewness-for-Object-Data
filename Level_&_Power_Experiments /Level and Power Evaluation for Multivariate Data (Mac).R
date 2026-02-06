@@ -6,6 +6,11 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(mvnormalTest)
+library(Rcpp)
+library(CompQuadForm)
+
+
+sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
 
 # --------------------------------------------------------
 # Function to compute h-hat(p) (Metric skewness)
@@ -323,23 +328,6 @@ u2_statistic <- function(D, G) {
 
 
 
-asymptotic_metric_skewness <- function(D, G) {
-  
-  n <- nrow(D)
-  
-  # U-statistics of order 3 require n >= 3
-  if (n < 3) return(NA_real_)
-  
-  U1 <- u1_statistic(D)
-  U2 <- u2_statistic(D, G)
-  
-  # Guard against division by zero or numerical degeneracy
-  if (!is.finite(U1) || abs(U1) < .Machine$double.eps) {
-    return(NA_real_)
-  }
-  
-  list(metric_skew = (U2 / U1), u1 = U1, u2 = U2)
-}
 
 #### example
 
@@ -350,13 +338,14 @@ d <- 3
 X <- matrix(rnorm(n * d), n, d)
 
 
-
 D <- distance_matrix_mv(X)
 G <- distance_matrix_to_flip(X)
 
-metric_skew_asym <- asymptotic_metric_skewness(D, G)
-metric_skew_asym
 
+U2_cpp <- u2_statistic_rcpp(D, G)
+U2_r   <- u2_statistic(D, G)
+
+all.equal(U2_cpp, U2_r)
 
 #### Variace 
 
@@ -374,34 +363,7 @@ s2_kernel <- function(j, k, l, D, G) {
   (r_jkl + r_klj + r_ljk) / 3
 }
 
-############# 1st option ######################
-
-# s_hat_j <- function(j, D, G, p) {
-#   n <- nrow(D)
-#   
-#   if (n < 3) return(NA_real_)
-#   
-#   idx <- setdiff(seq_len(n), j)
-#   denom <- choose(n - 1, 2)
-#   total <- 0
-#   
-#   for (a in 1:(length(idx) - 1)) {
-#     for (b in (a + 1):length(idx)) {
-#       k <- idx[a]
-#       l <- idx[b]
-#       
-#       if (p == 1) {
-#         total <- total + s1_kernel(j, k, l, D)
-#       } else if (p == 2) {
-#         total <- total + s2_kernel(j, k, l, D, G)
-#       }
-#     }
-#   }
-#   
-#   total / denom
-# }
-
-############ 2nd option #######################
+############ s_hat_j #######################
 
 s_hat_j <- function(j, D, G, p) {
   n <- nrow(D)
@@ -438,73 +400,6 @@ s_hat_vector <- function(D, G, p) {
   )
 }
 
-
-sigma_hat <- function(D, G) {
-  
-  
-  n <- nrow(D)
-  
-  if (n < 3) return(matrix(NA_real_, 2, 2))
-  
-  s1 <- s_hat_vector(D, p = 1)
-  s2 <- s_hat_vector(D, G, p = 2)
-  
-  s1c <- s1 - mean(s1)
-  s2c <- s2 - mean(s2)
-  
-  sigma <- matrix(0, 2, 2)
-  
-  sigma[1, 1] <- mean(s1c * s1c)
-  sigma[1, 2] <- mean(s1c * s2c)
-  sigma[2, 1] <- sigma[1, 2]
-  sigma[2, 2] <- mean(s2c * s2c)
-  
-  sigma
-}
-
-
-
-
-sigma_hat(D, G)
-
-#### New estimator 1
-sigma_hat_est1 <- function(D, G) {
-  s2 <- s_hat_vector(D, G, p = 2)
-  if (anyNA(s2)) return(NA_real_)
-  mean(s2^2)
-}
-
-
-#### New estimator 2
-
-sigma_hat_est2 <- function(D, G) {
-  s2 <- s_hat_vector(D, G, p = 2)
-  if (anyNA(s2)) return(NA_real_)
-  
-  n <- length(s2)
-  psi <- numeric(n)
-  
-  for (i in seq_len(n)) {
-    psi[i] <- mean(s2[-i])
-  }
-  
-  mean(psi^2)
-}
-
-
-#### New estimator 3
-
-sigma_hat_est3 <- function(D, G){
-  n <- nrow(D)
-  
-  U2_full <- u2_statistic(D, G)
-  temp <- 0
-  
-  for(j in 1:n){
-    temp <- temp + (u2_statistic(D[-j, -j], G[-j, -j]) - U2_full)^2
-  }
-  (n - 1)*temp/n
-}
 
 
 
@@ -548,66 +443,82 @@ sigma_hat_est3 <- function(D, G){
 
 #### Asymptotic Test
 
-
-
-Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
+imhof_cdf <- function(x, weights) {
+  res <- CompQuadForm::imhof(
+    q = x,
+    lambda = weights,
+    epsabs = 1e-10,
+    epsrel = 1e-10
+  )
   
-  sigma_estimator <- match.arg(sigma_estimator)
-  n <- nrow(D)
+  # Defensive check (works across versions)
+  if (!is.null(res$status) && res$status != 0) {
+    warning("Imhof algorithm returned non-zero status.")
+  }
+  
+  if (!is.finite(res$Qq)) {
+    warning("Imhof returned non-finite CDF value.")
+    return(NA_real_)
+  }
+  
+  res$Qq
+}
+
+
+Asymp_metric_test <- function(X) {
+  n <- nrow(X)
+  p <- ncol(X)
   
   if (n < 3)
     return(list(statistic = NA, p.value = NA))
   
+  # 1) Distance matrices
+  D <- distance_matrix_mv(X)
+  G <- distance_matrix_to_flip(X)
   
+  # 2) U2 statistic (C++ version)
+  U2 <- u2_statistic_rcpp(D, G)
   
-  # U2 statistic
-  U2 <- u2_statistic(D, G)
+  # 3) Sample covariance
+  Sigma_hat <- cov(X)
   
-  # variance estimation
-  if (sigma_estimator == "est1") {
-    sigma2_hat <- sigma_hat_est1(D, G)
-  }
-  if (sigma_estimator == "est2") {
-    sigma2_hat <- sigma_hat_est3(D, G)
-  }
-  if (sigma_estimator == "est3") {
-    sigma2_hat <- sigma_hat_est3(D, G)
-  }
+  # 4) Eigenvalues and trace(Sigma^2)
+  eigvals <- eigen(Sigma_hat, symmetric = TRUE, only.values = TRUE)$values
+  theta_sq <- eigvals^2
+  trSigma2 <- sum(theta_sq)
   
-  if (!is.finite(sigma2_hat) || sigma2_hat <= 0)
-    return(list(statistic = NA, p.value = NA))
+  # 5) Test statistic
+  Tn <- (n * U2 + trSigma2) / 16
   
-  Z <- sqrt(n) * (U2) / (3 * sqrt(sigma2_hat))
-  pval <- 1 - pnorm(Z)
+  # # 6) CDF via Imhof
+  # cdf_val <- imhof_cdf(Tn, theta_sq)
+  # 
+  # pval <- 1 - cdf_val
+  # 
+  
+  # 6) CDF via Imhof
+  cdf_val <- imhof_cdf(Tn, theta_sq)
+  
+  # two-sided p-value
+  pval <- 2 * min(cdf_val, 1 - cdf_val)
+  
+  # keep within [0,1] numerically
+  pval <- min(max(pval, 0), 1)
   
   list(
-    statistic = Z,
+    statistic = Tn,
     p.value = pval,
-    method = sigma_estimator
+    U2 = U2,
+    trSigma2 = trSigma2,
+    eigenvalues = eigvals
   )
 }
 
+X <- gen_azzalini(n = 100, p = 3, alpha = c(0, 0, 0))
+Asymp_metric_test(X)
 
-######### OR
 
 
-# Asymp_test <- function(D, G) {
-#   
-#   n <- nrow(D)
-#   
-#   
-#   
-#   sigma_h <- sigma_hat(D, G)
-#   sigma22  <- sigma_h[2,2]
-#   
-#   Zobs <- sqrt(n) * (asymptotic_metric_skewness(D, G)$u2)/(asymptotic_metric_skewness(D, G)$u1)
-#   sdZ  <- sqrt((9 * sigma22) / (asymptotic_metric_skewness(D, G)$u1)^2)
-#   
-#   pval <- 1 - pnorm(Zobs, mean = 0, sd = sdZ)
-#   
-#   list(statistic = Zobs, p.value = pval)
-# }
-# 
 
 
 ################################## Power Evaluation ########################
@@ -617,8 +528,7 @@ power_fixed_n <- function(
     alpha_grid,
     nrep,
     B,
-    alpha,
-    sigma
+    alpha
 ) {
   
   
@@ -639,12 +549,11 @@ power_fixed_n <- function(
       
       X <- gen_azzalini(n, p, alpha_skew)
       
-      D <- distance_matrix_mv(X)
-      G <- distance_matrix_to_flip(X)
+      
       
       c(
         Metric_perm  = perm_test_metric(X, B),
-        Metric_asymp = Asymp_test(D, G, sigma)$p.value,
+        Metric_asymp = Asymp_metric_test(X)$p.value,
         Mardia_perm  = perm_test_mardia(X, B),
         Mardia_asymp = asymp_pvalue_mardia(X)
       )
@@ -681,13 +590,13 @@ alpha_grid <- list(
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 100 , B = 500, 0.05)
 end <- Sys.time()
 
 running_time <- end - start
 
 start <- Sys.time()
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05,'est3')
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 100 , B = 500, 0.05)
 end <- Sys.time()
 
 running_time <- end - start
@@ -741,36 +650,7 @@ ggplot(
 
 
 
-### A small power experiment added by Joni
 
-
-# set.seed(1234)
-# n <- 40
-# p <- 3
-# alpha_seq <- c(0, 0.25, 0.5, 0.75, 1)
-# 
-# iter <- 1000
-# 
-# my_res <- rep(0, length(alpha_seq))
-# 
-# for(j in 1:length(alpha_seq)){
-#   res <- t(replicate(iter, {
-#     X <- gen_azzalini(n, p, rep(alpha_seq[j], 3))
-#     D <- distance_matrix_mv(X)
-#     G <- distance_matrix_to_flip(X)
-#     
-#     Asymp_test(D, G, sigma_estimator = "est3")$p.value
-#   }))
-#   
-#   my_res[j] <- mean(res < 0.05)
-#   print(j)
-# }
-# 
-# 
-# my_res
-# plot(alpha_seq, my_res, type = "b", xlab = "Alpha (in Azzalini)", ylab = "Rejection proportion")
-# abline(h = 0.05, col = 2, lty = 2)
-# 
 
 
 
