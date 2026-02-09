@@ -7,6 +7,8 @@ library(dplyr)
 library(parallel)
 library(purrr)
 library(Rcpp)
+library(CompQuadForm)
+
 
 ### This is a way to generate data (corr and Cov)
 
@@ -137,76 +139,107 @@ Perm_test(matrices,20,2,0)
 
 ############## Asymptotic test for Metric Skewness ###########################
 
-distance_matrix <- function(mats) {
-  n <- dim(mats)[3]
-  D <- matrix(0, n, n)
-  
-  for (i in 1:(n - 1)) {
-    for (j in (i + 1):n) {
-      d2 <- distcov(
-        mats[, , i],
-        mats[, , j],
-        method = "LogEuclidean"
-      )^2
-      
-      D[i, j] <- d2
-      D[j, i] <- d2
-    }
-  }
-  
-  D
-}
 
-distance_matrix_to_inverse <- function(mats) {
-  inv_mats <- invert_matrices(mats)
-  n <- dim(mats)[3]
-  
-  Dinv <- matrix(0, n, n)
-  
-  for (i in 1:n) {
-    Xi <- mats[, , i]
-    for (j in i:n) {
-      d2 <- distcov(Xi, inv_mats[, , j],
-                    method = "LogEuclidean")^2
-      
-      Dinv[i, j] <- d2
-      Dinv[j, i] <- d2
-    }
-  }
-  
-  Dinv
-}
+##### Distances
 
+## Using distcove function
 
-
-
-
-
-
-# distance_matrix_fast <- function(mats) {
+# distance_matrix <- function(mats) {
 #   n <- dim(mats)[3]
 #   D <- matrix(0, n, n)
 #   
-#   idx <- which(upper.tri(D), arr.ind = TRUE)
-#   
-#   for (m in seq_len(nrow(idx))) {
-#     i <- idx[m, 1]
-#     j <- idx[m, 2]
-#     
-#     d2 <- distcov(
-#       mats[, , i],
-#       mats[, , j],
-#       method = "LogEuclidean"
-#     )^2
-#     
-#     D[i, j] <- d2
-#     D[j, i] <- d2
+#   for (i in 1:(n - 1)) {
+#     for (j in (i + 1):n) {
+#       d2 <- distcov(
+#         mats[, , i],
+#         mats[, , j],
+#         method = "LogEuclidean"
+#       )^2
+#       
+#       D[i, j] <- d2
+#       D[j, i] <- d2
+#     }
 #   }
 #   
 #   D
 # }
+# 
+# distance_matrix_to_inverse <- function(mats) {
+#   inv_mats <- invert_matrices(mats)
+#   n <- dim(mats)[3]
+#   
+#   Dinv <- matrix(0, n, n)
+#   
+#   for (i in 1:n) {
+#     Xi <- mats[, , i]
+#     for (j in i:n) {
+#       d2 <- distcov(Xi, inv_mats[, , j],
+#                     method = "LogEuclidean")^2
+#       
+#       Dinv[i, j] <- d2
+#       Dinv[j, i] <- d2
+#     }
+#   }
+#   
+#   Dinv
+# }
 
 
+#### OR
+
+## computing LogEuc Distance manually
+
+
+logm_spd <- function(X) {
+  # X: p x p SPD matrix
+  ee <- eigen(X, symmetric = TRUE)
+  Q  <- ee$vectors
+  d  <- ee$values
+  if (any(d <= 0)) stop("Matrix not SPD (non-positive eigenvalues).")
+  Q %*% diag(log(d), length(d)) %*% t(Q)
+}
+
+distance_matrix_logeuclid <- function(mats) {
+  # mats: p x p x n array of spd matrices
+  n <- dim(mats)[3]
+  logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
+  d <- matrix(0, n, n)
+  for (i in 1:(n-1)) {
+    li <- logs[[i]]
+    for (j in (i+1):n) {
+      diff <- li - logs[[j]]
+      d2 <- sum(diff * diff)  # frobenius norm squared
+      d[i, j] <- d2
+      d[j, i] <- d2
+    }
+  }
+  d
+}
+
+distance_matrix_to_inverse_logeuclid <- function(mats) {
+  # g(x)=x^{-1}; log(x^{-1}) = -log(x)
+  n <- dim(mats)[3]
+  logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
+  dinv <- matrix(0, n, n)
+  for (i in 1:n) {
+    li <- logs[[i]]
+    for (j in 1:n) {
+      diff <- li + logs[[j]]  # li - (-lj)
+      dinv[i, j] <- sum(diff * diff)
+    }
+  }
+  dinv
+}
+# 
+# D1 <- distance_matrix(mats)
+# D2 <- distance_matrix_to_inverse(mats)
+# D3 <- distance_logeuclid_cpp(mats)
+# D4 <- distance_to_inverse_logeuclid_cpp(mats)
+# round(max(abs(D2 - D4)),5)
+# max(abs(D1 - D3))
+
+
+###### U statistics
 
 
 u1_statistic <- function(D) {
@@ -271,228 +304,72 @@ u2_statistic <- function(D, G) {
   total / (3 * choose(n, 3))
 }
 
-
-
-
-
-asymptotic_metric_skewness <- function(D, G) {
-  
-  n <- nrow(D)
-  
-  # U-statistics of order 3 require n >= 3
-  if (n < 3) return(NA_real_)
-  
-  U1 <- u1_statistic(D)
-  U2 <- u2_statistic(D, G)
-  
-  # Guard against division by zero or numerical degeneracy
-  if (!is.finite(U1) || abs(U1) < .Machine$double.eps) {
-    return(NA_real_)
-  }
-  
-  list(metric_skew = (U2 / U1), u1 = U1, u2 = U2)
-}
-
+#### Examples 
 
 set.seed(1)
 
-n   <- 5
+n   <- 10
 dim <- 5
-mu  <- 0
+mu  <- 1
 sig <- 0.5
 
 mats <- generate_matrices(n, dim, mu, sig)
 
-D <- distance_matrix(mats)
-G <- distance_matrix_to_inverse(mats)
-
-metric_skew_asym <- asymptotic_metric_skewness(D, G)
-metric_skew_asym
 
 
-
-#### Variace 
-
-s1_kernel <- function(j, k, l, D) {
-  (D[j, k] * D[j, l] +
-     D[k, l] * D[k, j] +
-     D[l, j] * D[l, k]) / 3
-}
-
-s2_kernel <- function(j, k, l, D, G) {
-  r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
-  r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
-  r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
-  
-  (r_jkl + r_klj + r_ljk) / 3
-}
+D <- distance_matrix_logeuclid(mats)
+G <- distance_matrix_to_inverse_logeuclid(mats)
 
 
-############# 1st option ######################
+U2_r   <- u2_statistic(D, G)
 
-# s_hat_j <- function(j, D, G, p) {
-#   n <- nrow(D)
-#   
-#   if (n < 3) return(NA_real_)
-#   
-#   idx <- setdiff(seq_len(n), j)
-#   denom <- choose(n - 1, 2)
-#   total <- 0
-#   
-#   for (a in 1:(length(idx) - 1)) {
-#     for (b in (a + 1):length(idx)) {
-#       k <- idx[a]
-#       l <- idx[b]
-#       
-#       if (p == 1) {
-#         total <- total + s1_kernel(j, k, l, D)
-#       } else if (p == 2) {
-#         total <- total + s2_kernel(j, k, l, D, G)
-#       }
-#     }
-#   }
-#   
-#   total / denom
-# }
 
-############ 2nd option #######################
 
-s_hat_j <- function(j, D, G, p) {
-  n <- nrow(D)
-  if (n < 3) return(NA_real_)
-  
-  idx <- setdiff(seq_len(n), j)
-  denom <- choose(n - 1, 2)
-  total <- 0
-  
-  for (k in idx) {
-    
-    for (l in setdiff(seq(k, n), j)) {   # <-- L >= K
-      
-      if (p == 1) {
-        total <- total + s1_kernel(j, k, l, D)
-      } else if (p == 2) {
-        total <- total + s2_kernel(j, k, l, D, G)
+
+
+
+##### Sigma hat
+vec0 <- function(S) {
+  # S: p x p symmetric matrix
+  p <- nrow(S)
+  out <- numeric(p * (p + 1) / 2)
+  idx <- 1L
+  for (j in 1:p) {
+    for (i in 1:j) {
+      if (i == j) {
+        out[idx] <- S[i, j]
+      } else {
+        out[idx] <- sqrt(2) * S[i, j]
       }
+      idx <- idx + 1L
     }
   }
-  
-  total / denom
-}
-
-################################################
-
-s_hat_vector <- function(D, G, p) {
-  n <- nrow(D)
-  
-  vapply(
-    seq_len(n),
-    function(j) s_hat_j(j, D, G, p),
-    numeric(1)
-  )
-}
-
-
-sigma_hat <- function(D, G) {
-  
-  
-  n <- nrow(D)
-  
-  if (n < 3) return(matrix(NA_real_, 2, 2))
-  
-  s1 <- s_hat_vector(D, p = 1)
-  s2 <- s_hat_vector(D, G, p = 2)
-  
-  s1c <- s1 - mean(s1)
-  s2c <- s2 - mean(s2)
-  
-  sigma <- matrix(0, 2, 2)
-  
-  sigma[1, 1] <- mean(s1c * s1c)
-  sigma[1, 2] <- mean(s1c * s2c)
-  sigma[2, 1] <- sigma[1, 2]
-  sigma[2, 2] <- mean(s2c * s2c)
-  
-  sigma
+  out
 }
 
 
 
 
-sigma_hat(D, G)
-
-
-
-# ################## To just check ##############
-# nrep <- 1000
-# n <- 40
-# 
-# # ncores = detectCores() - 1
-# # 
-# # # create cluster ONCE
-# # cl <- makeCluster(ncores)
-# # on.exit(stopCluster(cl), add = TRUE)
-# 
-# 
-# 
-# 
-# results <- sapply(seq_len(nrep), function(r) {
-#   mats <- generate_matrices(n, dim, mu, sig)
-#   D <- distance_matrix(mats)
-#   G <- distance_matrix_to_inverse(mats)
-#   u1 <- u1_statistic(D)
-#   u1s <- u1^2
-#   U <- u2_statistic(D,G)/u1
-#   s22 <- sigma_hat(D, G)[2,2]
-#   return(c(u1s,
-#            U ,
-#            s22))
-# })
-# 
-# hist(results[2,], freq = FALSE, breaks = 30)
-# 
-# sd <- sqrt(9*mean(results[3,])/(n*mean(results[1,])))
-# 
-# curve(dnorm(x,sd = sd),add =TRUE)
-
-#### New estimator 1
-sigma_hat_est1 <- function(D, G) {
-  s2 <- s_hat_vector(D, G, p = 2)
-  if (anyNA(s2)) return(NA_real_)
-  mean(s2^2)
+cov_vec0_log <- function(mats) {
+  # mats: p x p x n
+  n <- dim(mats)[3]
+  V <- lapply(seq_len(n), function(i) vec0(logm_spd(mats[,,i])))
+  V <- do.call(rbind, V)  # n x q, q = p(p+1)/2
+  cov(V)                  # sample covariance (q x q)
 }
 
 
-#### New estimator 2
-
-sigma_hat_est2 <- function(D, G) {
-  s2 <- s_hat_vector(D, G, p = 2)
-  if (anyNA(s2)) return(NA_real_)
+imhof_cdf <- function(x, weights) {
+  res <- CompQuadForm::imhof(q = x, 
+                             lambda = weights,
+                             epsabs = 1e-15, 
+                             epsrel = 1e-15)
   
-  n <- length(s2)
-  psi <- numeric(n)
-  
-  for (i in seq_len(n)) {
-    psi[i] <- mean(s2[-i])
-  }
-  
-  mean(psi^2)
+  res$Qq
 }
 
 
-#### New estimator 3
 
-sigma_hat_est3 <- function(D, G){
-  n <- nrow(D)
-  
-  U2_full <- u2_statistic(D, G)
-  temp <- 0
-  
-  for(j in 1:n){
-    temp <- temp + (u2_statistic(D[-j, -j], G[-j, -j]) - U2_full)^2
-  }
-  (n - 1)*temp/n
-}
 
 
 
@@ -500,53 +377,61 @@ sigma_hat_est3 <- function(D, G){
 
 #### Asymptotic Test
 
-
-
-Asymp_test <- function(D, G, sigma_estimator = c("est1", "est2", "est3")) {
+Asymp_metric_skewness_spd <- function(mats) {
+  # mats: p x p x n SPD array
+  n <- dim(mats)[3]
+  if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
   
-  sigma_estimator <- match.arg(sigma_estimator)
-  n <- nrow(D)
-  
-  if (n < 3)
-    return(list(statistic = NA, p.value = NA))
-  
+  # 1) Log–Euclidean distances
+  D <- distance_matrix_logeuclid(mats)
+  G <- distance_matrix_to_inverse_logeuclid(mats)
   
   
-  # U2 statistic
+  # 2) U2 from Rcpp
   U2 <- u2_statistic(D, G)
   
-  # variance estimation
-  if (sigma_estimator == "est1") {
-    sigma2_hat <- sigma_hat_est1(D, G)
-  }
-  if (sigma_estimator == "est2") {
-    sigma2_hat <- sigma_hat_est2(D, G)
-  }
-  if (sigma_estimator == "est3") {
-    sigma2_hat <- sigma_hat_est3(D, G)
-  }
+  # 3) Sigma from vec0(log(X))
+  Sigma_hat <- cov_vec0_log(mats)
   
-  if (!is.finite(sigma2_hat) || sigma2_hat <= 0)
-    return(list(statistic = NA, p.value = NA))
   
-  Z <- sqrt(n) * (U2) / (3 * sqrt(sigma2_hat))
-  pval <- 1 - pnorm(Z)
+  
+  # 4) Eigenvalues and trace(Sigma^2)
+  eigvals <- eigen(Sigma_hat, symmetric = TRUE, only.values = TRUE)$values
+  theta_sq <- eigvals^2
+  trSigma2 <- sum(theta_sq)  # = tr(Sigma_hat^2)
+  
+  # 5) Test statistic (correct parentheses)
+  Tn <- (n * U2) / 16 + trSigma2
+  
+  # # 6) Upper-tail p-value under weighted chi-square limit
+  cdf_val <- imhof_cdf(Tn, theta_sq)
+  pval <- cdf_val
+  
+  
+  # # 6) CDF via Imhof
+  # cdf_val <- imhof_cdf(Tn, theta_sq)
+  # 
+  # # two-sided p-value
+  # pval <- 2 * min(cdf_val, 1 - cdf_val)
+  # 
+  # # keep within [0,1] numerically
+  # pval <- min(max(pval, 0), 1)
   
   list(
-    statistic = Z,
+    statistic = Tn,
     p.value = pval,
-    method = sigma_estimator
+    U2 = U2,
+    trSigma2 = trSigma2,
+    eigenvalues = eigvals
   )
 }
 
 
-
-
-
-
-Asymp_test(D, G,'est2')
+Asymp_metric_skewness_spd(mats)
 
 ################################## Power Evaluation ########################
+
+#### windows
 
 power_fixed_n <- function(
     n,
@@ -555,8 +440,7 @@ power_fixed_n <- function(
     sig,
     nrep,
     B,
-    alpha,
-    sigma = c("est1", "est2", "est3")
+    alpha
 ) {
   
   
@@ -568,8 +452,10 @@ power_fixed_n <- function(
   
   # load needed packages on workers
   clusterEvalQ(cl, {
-    library(MASS,sn)
+    library(Rcpp, RcppArmadillo)
   })
+  
+  
   
   # export functions & objects used by workers
   clusterExport(
@@ -577,41 +463,28 @@ power_fixed_n <- function(
     c(
       "generate_matrices",
       'metric_skew_fun',
-      "distance_matrix",
       'invert_matrices',
-      "distance_matrix_to_inverse",
-      'average_squared_distances',
       'average_squared_distances_inverted',
+      'average_squared_distances',
+      'distance_matrix_logeuclid',
+      'distance_matrix_to_inverse_logeuclid',
       "Perm_test",
-      "Asymp_test",
-      'u1_statistic',
       'u2_statistic',
-      'asymptotic_metric_skewness',
-      "s_hat_j",
-      "s1_kernel",
-      's2_kernel',
-      "sigma_hat_est1",
-      "sigma_hat_est2",
-      "sigma_hat_est3",
       "rorth",
       'pnorm',
+      'cov_vec0_log',
+      'vec0',
+      'logm_spd',
+      'distance_matrix_logeuclid',
+      'distance_matrix_to_inverse_logeuclid',
+      'imhof_cdf',
+      'Asymp_metric_skewness_spd',
       'n',
       "B", "dim", "sig" ,'distcov'
     ),
     envir = environment()
   )
   
-  sigma <- match.arg(sigma)
-  
-  if (sigma == "est1") {
-    sigma <- "est1"
-  }
-  if (sigma == "est2") {
-    sigma <- "est2"
-  }
-  if (sigma == "est3") {
-    sigma <- "est3"
-  }
   
   
   power <- matrix(NA, nrow = length(mu), ncol = 2)
@@ -621,18 +494,18 @@ power_fixed_n <- function(
     
     mu_skew <- mu[k]
     
-
+    
     pvals <- parSapply(cl, seq_len(nrep), function(r) {
       
       
       mats <- generate_matrices(n, dim, mu_skew, sig)
       
-      D <- distance_matrix(mats)
-      G <- distance_matrix_to_inverse(mats)
+      D <- distance_matrix_logeuclid(mats)
+      G <- distance_matrix_to_inverse_logeuclid(mats)
       
       c(
         Metric_perm  = Perm_test(mats, B,2,0)$p_value,
-        Metric_asymp = Asymp_test(D, G, sigma)$p.value
+        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
       )
       
     })
@@ -660,28 +533,27 @@ power_fixed_n <- function(
 mu <- seq(0,0.05,0.01)
 dim <- 3
 sig <- 0.05
-sigma <- 'est3'
 nrep <- 1000
 B <- 500
 
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, sig, sigma)
+res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, sig)
 end <- Sys.time()
 
 running_time <- end - start
 
 
 start <- Sys.time()
-res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig, sigma)
+res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig)
 end <- Sys.time()
 
 start <- Sys.time()
-res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig, sigma)
+res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig)
 end <- Sys.time()
 
-running_time <- end - start
+running_time2 <- end - start
 
 
 df_n20 <- res_n20 |>
@@ -869,7 +741,3 @@ plot(res$sample_sizes, res$proportions, type = "b", pch = 19,
      ylab = "Proportion p < alpha",
      main = "Level of permutation test (mu = 0)")
 abline(h = 0.05, col = "red", lty = 2)
-
-
-
-
