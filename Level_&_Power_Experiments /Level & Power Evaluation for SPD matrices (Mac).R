@@ -9,6 +9,8 @@ library(purrr)
 library(Rcpp)
 library(CompQuadForm)
 
+### The  gfortran-14.2-universal.pkg needs to be installed on Mac
+
 sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
 
 ### This is a way to generate data (corr and Cov)
