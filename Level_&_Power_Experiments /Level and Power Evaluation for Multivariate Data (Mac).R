@@ -450,20 +450,17 @@ Asymp_metric_test <- function(X) {
   Tn <- ((n * U2) / 16) + trSigma2
   
   
-  # # 6) CDF via Imhof
-  # cdf_val <- imhof_cdf(Tn, theta_sq)
-  # 
-  # pval <- 1 - cdf_val
-
-  
   # 6) CDF via Imhof
   cdf_val <- imhof_cdf(Tn, theta_sq)
 
-  # two-sided p-value
-  pval <- 2 * min(cdf_val, 1 - cdf_val)
+  pval <-  cdf_val
 
-  # keep within [0,1] numerically
-  pval <- min(max(pval, 0), 1)
+  
+  ## OR two-sided p-value
+  # pval <- 2 * min(cdf_val, 1 - cdf_val)
+  # 
+  # # keep within [0,1] numerically
+  # pval <- min(max(pval, 0), 1)
   
   list(
     statistic = Tn,
