@@ -547,15 +547,12 @@ alpha_grid <- list(
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 100 , B = 500, 0.05)
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+
+
 end <- Sys.time()
-
-running_time <- end - start
-
-start <- Sys.time()
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 100 , B = 500, 0.05)
-end <- Sys.time()
-
 running_time <- end - start
 
 
