@@ -8,7 +8,7 @@ library(parallel)
 library(purrr)
 library(Rcpp)
 library(CompQuadForm)
-
+library(LogDis)
 
 ### This is a way to generate data (corr and Cov)
 
@@ -28,7 +28,6 @@ generate_matrices <- function(sample_size,dim,mu,sig) {
   
 }
 
-matrices <- generate_matrices(5,3,0,1)
 
 
 
@@ -131,10 +130,6 @@ Perm_test <- function(matrices, iter, seed, regularize){
 }
 
 
-Perm_test(matrices,20,2,0)
-
-
-
 
 
 ############## Asymptotic test for Metric Skewness ###########################
@@ -189,7 +184,7 @@ Perm_test(matrices,20,2,0)
 
 ## computing LogEuc Distance manually
 
-
+# 
 logm_spd <- function(X) {
   # X: p x p SPD matrix
   ee <- eigen(X, symmetric = TRUE)
@@ -198,38 +193,38 @@ logm_spd <- function(X) {
   if (any(d <= 0)) stop("Matrix not SPD (non-positive eigenvalues).")
   Q %*% diag(log(d), length(d)) %*% t(Q)
 }
-
-distance_matrix_logeuclid <- function(mats) {
-  # mats: p x p x n array of spd matrices
-  n <- dim(mats)[3]
-  logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
-  d <- matrix(0, n, n)
-  for (i in 1:(n-1)) {
-    li <- logs[[i]]
-    for (j in (i+1):n) {
-      diff <- li - logs[[j]]
-      d2 <- sum(diff * diff)  # frobenius norm squared
-      d[i, j] <- d2
-      d[j, i] <- d2
-    }
-  }
-  d
-}
-
-distance_matrix_to_inverse_logeuclid <- function(mats) {
-  # g(x)=x^{-1}; log(x^{-1}) = -log(x)
-  n <- dim(mats)[3]
-  logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
-  dinv <- matrix(0, n, n)
-  for (i in 1:n) {
-    li <- logs[[i]]
-    for (j in 1:n) {
-      diff <- li + logs[[j]]  # li - (-lj)
-      dinv[i, j] <- sum(diff * diff)
-    }
-  }
-  dinv
-}
+# 
+# distance_matrix_logeuclid <- function(mats) {
+#   # mats: p x p x n array of spd matrices
+#   n <- dim(mats)[3]
+#   logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
+#   d <- matrix(0, n, n)
+#   for (i in 1:(n-1)) {
+#     li <- logs[[i]]
+#     for (j in (i+1):n) {
+#       diff <- li - logs[[j]]
+#       d2 <- sum(diff * diff)  # frobenius norm squared
+#       d[i, j] <- d2
+#       d[j, i] <- d2
+#     }
+#   }
+#   d
+# }
+# 
+# distance_matrix_to_inverse_logeuclid <- function(mats) {
+#   # g(x)=x^{-1}; log(x^{-1}) = -log(x)
+#   n <- dim(mats)[3]
+#   logs <- lapply(seq_len(n), function(i) logm_spd(mats[,,i]))
+#   dinv <- matrix(0, n, n)
+#   for (i in 1:n) {
+#     li <- logs[[i]]
+#     for (j in 1:n) {
+#       diff <- li + logs[[j]]  # li - (-lj)
+#       dinv[i, j] <- sum(diff * diff)
+#     }
+#   }
+#   dinv
+# }
 # 
 # D1 <- distance_matrix(mats)
 # D2 <- distance_matrix_to_inverse(mats)
@@ -317,11 +312,15 @@ mats <- generate_matrices(n, dim, mu, sig)
 
 
 
-D <- distance_matrix_logeuclid(mats)
-G <- distance_matrix_to_inverse_logeuclid(mats)
+# D <- distance_matrix_logeuclid(mats)
+# G <- distance_matrix_to_inverse_logeuclid(mats)
+
+D <- distance_logeuclid_cpp(mats)
+G <- distance_to_inverse_logeuclid_cpp(mats)
 
 
-U2_r   <- u2_statistic(D, G)
+u2_statistic_rcpp(D, G)
+u2_statistic(D, G)
 
 
 
@@ -383,12 +382,15 @@ Asymp_metric_skewness_spd <- function(mats) {
   if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
   
   # 1) Log–Euclidean distances
-  D <- distance_matrix_logeuclid(mats)
-  G <- distance_matrix_to_inverse_logeuclid(mats)
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  
   
   
   # 2) U2 from Rcpp
-  U2 <- u2_statistic(D, G)
+  U2 <-  u2_statistic_rcpp(D, G)
   
   # 3) Sigma from vec0(log(X))
   Sigma_hat <- cov_vec0_log(mats)
@@ -450,10 +452,10 @@ power_fixed_n <- function(
   cl <- makeCluster(ncores)
   on.exit(stopCluster(cl), add = TRUE)
   
-  # load needed packages on workers
-  clusterEvalQ(cl, {
-    library(Rcpp, RcppArmadillo)
-  })
+  # # load needed packages on workers
+  # clusterEvalQ(cl, {
+  #   library(Rcpp, RcppArmadillo)
+  # })
   
   
   
@@ -466,21 +468,20 @@ power_fixed_n <- function(
       'invert_matrices',
       'average_squared_distances_inverted',
       'average_squared_distances',
-      'distance_matrix_logeuclid',
-      'distance_matrix_to_inverse_logeuclid',
       "Perm_test",
-      'u2_statistic',
-      "rorth",
+      'u2_statistic_rcpp',
       'pnorm',
+      'rorth',
       'cov_vec0_log',
+      'distance_logeuclid_cpp',
+      'distance_to_inverse_logeuclid_cpp',
       'vec0',
       'logm_spd',
-      'distance_matrix_logeuclid',
-      'distance_matrix_to_inverse_logeuclid',
       'imhof_cdf',
+      'distcov',
       'Asymp_metric_skewness_spd',
       'n',
-      "B", "dim", "sig" ,'distcov'
+      "B", "dim", "sig"
     ),
     envir = environment()
   )
@@ -500,8 +501,9 @@ power_fixed_n <- function(
       
       mats <- generate_matrices(n, dim, mu_skew, sig)
       
-      D <- distance_matrix_logeuclid(mats)
-      G <- distance_matrix_to_inverse_logeuclid(mats)
+      D <- distance_logeuclid_cpp(mats)
+      G <- distance_to_inverse_logeuclid_cpp(mats)
+      
       
       c(
         Metric_perm  = Perm_test(mats, B,2,0)$p_value,
@@ -540,21 +542,14 @@ B <- 500
 start <- Sys.time()
 
 res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, sig)
+
+res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig)
+
+res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig)
+
 end <- Sys.time()
 
 running_time <- end - start
-
-
-start <- Sys.time()
-res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig)
-end <- Sys.time()
-
-start <- Sys.time()
-res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig)
-end <- Sys.time()
-
-running_time2 <- end - start
-
 
 df_n20 <- res_n20 |>
   pivot_longer(
