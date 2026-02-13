@@ -8,7 +8,19 @@ library(parallel)
 library(purrr)
 library(Rcpp)
 library(CompQuadForm)
+
+
+#####
+remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
 library(LogDis)
+# ## OR 
+# sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
+# sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/spd_distances.cpp")
+# ## OR
+# devtools::install('/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis')
+# library(LogDis)
+#####
+
 
 ### This is a way to generate data (corr and Cov)
 
@@ -611,128 +623,150 @@ ggplot(
 ############# Level evaluation 
 
 
-estimate_level_asymp <- function(sample_sizes, dim, mu, sig,
-                                 nrep, alpha,
-                                 ncores = detectCores() - 1) {
+## Windows
+level_test_parallel <- function(sample_sizes, 
+                                 dim, 
+                                 mu, 
+                                 sig,
+                                 nrep, 
+                                 B, 
+                                 alpha) {
+  
+  ncores = detectCores() - 1
   
   # create cluster ONCE
   cl <- makeCluster(ncores)
   on.exit(stopCluster(cl), add = TRUE)
   
-  # load needed packages on workers
-  clusterEvalQ(cl, {
-    library(MASS,sn)
-  })
   
   # export functions & objects used by workers
   clusterExport(
     cl,
-    c("u1_statistic","u2_statistic", "metric_skew_asym",
-      "s1_kernel", "s2_kernel", "D", "G",'sample_sizes','s_hat_j','sigma_hat','Asymp_test',
-      's_hat_vector'),
+    c(
+      "generate_matrices",
+      'metric_skew_fun',
+      'invert_matrices',
+      'average_squared_distances_inverted',
+      'average_squared_distances',
+      "Perm_test",
+      'u2_statistic_rcpp',
+      'pnorm',
+      'rorth',
+      'cov_vec0_log',
+      'distance_logeuclid_cpp',
+      'distance_to_inverse_logeuclid_cpp',
+      'vec0',
+      'logm_spd',
+      'imhof_cdf',
+      'distcov',
+      'Asymp_metric_skewness_spd',
+      'n',
+      "B", "dim", "sig",'mu'),
     envir = environment()
   )
   
-  proportions <- numeric(length(sample_sizes))
+  results_hhat         <- numeric(length(sample_sizes))
+  results_hhat_asym    <- numeric(length(sample_sizes))
   
-  for (k in seq_along(sample_sizes)) {
-    n <- sample_sizes[k]
+  
+  
+  
+  for (i in seq_along(sample_sizes)) {
+    n <- sample_sizes[i]
     
-    results <- mclapply(seq_len(nrep), function(r) {
+    
+    pvals <- parSapply(cl, seq_len(nrep), function(r) {
+      
+      
       mats <- generate_matrices(n, dim, mu, sig)
-      D <- distance_matrix(mats)
-      G <- distance_matrix_to_inverse(mats)
-      test <- Asymp_test(D, G)
-      test$p.value < alpha
-    }, mc.cores = ncores)
+      
+      D <- distance_logeuclid_cpp(mats)
+      G <- distance_to_inverse_logeuclid_cpp(mats)
+      
+      c(
+        Metric_perm  = Perm_test(mats, B,2,0)$p_value,
+        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
+      )
+      
+    })
     
-    proportions[k] <- mean(unlist(results))
-    cat(sprintf("n=%d -> rejection proportion = %.3f\n",
-                n, proportions[k]))
+    
+    results_hhat[i]      <- mean(pvals[1, ] < alpha, na.rm = TRUE)
+    results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
+    
+    
+    cat(
+      "Done n =", n,
+      "| metric perm:", round(results_hhat[i], 3),
+      "| metric asym:", round(results_hhat_asym[i], 3),"\n")
+    
   }
   
-  list(sample_sizes = sample_sizes, proportions = proportions)
+  
+  
+  list(sample_sizes = sample_sizes,
+       metric_perm = results_hhat,
+       metric_asym = results_hhat_asym)
 }
 
 
 
 
-set.seed(1)
+set.seed(18)
 
 dim  <- 5
 mu   <- 0
 sig  <- 0.5
 alpha <- 0.05
-regularize <- 0
-sample_sizes <- c(100, 150, 151)
+sample_sizes <- c(5, 10, 15,20)
 
-nrep <- 100      # very small, just for illustration
+nrep <- 50     
+B <- 2
 
-
-level_asymp <- estimate_level_asymp(
+level_cov <- level_test_parallel(
   sample_sizes = sample_sizes,
   dim = dim,
-  mu = mu, sig = sig,
+  mu = mu, 
+  sig = sig,
   nrep = nrep,
+  B = B,
   alpha = alpha 
 )
 
-level_asymp
-
-
-
-
-# -----------------------------
-# 6) Simulation across sample sizes to estimate level
-# -----------------------------
-estimate_level_over_nsamples <- function(sample_sizes,
-                                         dim,
-                                         mu, sig,
-                                         nrep, iter,
-                                         alpha,
-                                         regularize,
-                                         seed) {
-  proportions <- numeric(length(sample_sizes))
-  for(k in seq_along(sample_sizes)) {
-    n <- sample_sizes[k]
-    rejections <- 0
-    for(rep in 1:nrep) {
-      mat <- generate_matrices(n, dim, mu, sig)
-      test <- Perm_test(mat, iter, seed, regularize)
-      if(test$p_value < alpha) rejections <- rejections + 1
-    }
-    proportions[k] <- rejections / nrep
-    cat(sprintf("n=%d  -> rejection prop = %.3f\n", n, proportions[k]))
-  }
-  list(sample_sizes = sample_sizes, proportions = proportions)
-}
 
 
 
 
 
 
-# -----------------------------
-# 7) Run a small experiment (example)
-# -----------------------------
-seed <- set.seed(2025)
-sample_sizes <- seq(10, 200, by = 20)
-sample_sizes <- c(2,5,10,20)
-
-res <- estimate_level_over_nsamples(sample_sizes,
-                                    dim = 4,
-                                    mu = 0, sig = 1,
-                                    nrep = 10,   # raise to 200+ for stable estimates
-                                    iter = 10,    # increase B for smoother p-values
-                                    alpha = 0.05,
-                                    regularize = 0,
-                                    seed)
 
 # -----------------------------
 # 8) Plot results
 # -----------------------------
-plot(res$sample_sizes, res$proportions, type = "b", pch = 19,
-     xlab = "Sample size (number of matrices)",
-     ylab = "Proportion p < alpha",
-     main = "Level of permutation test (mu = 0)")
-abline(h = 0.05, col = "red", lty = 2)
+df_spd <- tibble(
+  n = level_cov$sample_sizes,
+  Metric_perm = level_cov$metric_perm,
+  Metric_asym = level_cov$metric_asym
+) |>
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") 
+
+p_spd <- ggplot(df_spd,
+                aes(x = n, y = Rejection,
+                    color = Statistic, shape = Statistic)) +
+  geom_line(linewidth = 0.9, linetype = 'solid') +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "red") +
+  scale_color_manual(values = c("black", "blue",'green','purple')) +
+  scale_shape_manual(values = c(19, 17,18,15)) +
+  labs(
+    title = "Level Evaluation (Cov Data)",
+    x = "Sample Size",
+    y = expression("Proportion of Rejection (p < " * alpha * ")")
+  ) + 
+  ylim(0, 0.5) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
