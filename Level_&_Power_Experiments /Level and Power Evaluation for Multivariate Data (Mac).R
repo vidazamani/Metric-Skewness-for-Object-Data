@@ -1,3 +1,5 @@
+# Load necessary libraries
+
 library(sn)
 library(MASS)
 library(parallel)
@@ -9,8 +11,16 @@ library(mvnormalTest)
 library(Rcpp)
 library(CompQuadForm)
 
-
-sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
+#####
+remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
+library(LogDis)
+# ## OR 
+# sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
+# sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/spd_distances.cpp")
+# ## OR
+# devtools::install('/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis')
+# library(LogDis)
+#####
 
 # --------------------------------------------------------
 # Function to compute h-hat(p) (Metric skewness)
@@ -592,7 +602,7 @@ ggplot(
   scale_y_continuous(limits = c(0, 1)) +
   labs(
     x = expression("norm of "* alpha *" (Skewness magnitude)"),
-    y = "Power",
+    y = "RP",
     title = "Power Comparison under Azzalini Skew-Normal Data"
   ) +
   theme_minimal(base_size = 13) +
@@ -688,8 +698,8 @@ level_test_parallel <- function(gen_fun,
 set.seed(1)
 
 ## Parameters 
-sample_sizes <- seq(50,150,20)
-nrep = 1000
+sample_sizes <- seq(20,300,20)
+nrep = 10000
 B = 500
 alpha = 0.05
 p = 3
@@ -733,6 +743,7 @@ end <- Sys.time()
 
 running_time <- end - start
 
+
 #### Visualization
 
 df_az <- tibble(
@@ -773,7 +784,7 @@ p_az <- ggplot(df_az,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   ) + 
-  ylim(0, 0.1) +
+  ylim(0.02, 0.08) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
@@ -795,7 +806,7 @@ p_sdb <- ggplot(df_sdb,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   ) +  
-  ylim(0, 0.1) +
+  ylim(0, 0.08) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "none",
