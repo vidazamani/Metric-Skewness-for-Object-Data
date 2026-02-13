@@ -736,47 +736,89 @@ level_test_parallel <- function(sample_sizes,
 
 
 ## Windows
-estimate_level_asymp <- function(sample_sizes, dim, mu, sig,
-                                 nrep, alpha,
-                                 ncores = detectCores() - 1) {
+estimate_level_asymp <- function(sample_sizes, 
+                                 dim, 
+                                 mu, 
+                                 sig,
+                                 nrep, 
+                                 B, 
+                                 alpha) {
+  
+  ncores = detectCores() - 1
   
   # create cluster ONCE
   cl <- makeCluster(ncores)
   on.exit(stopCluster(cl), add = TRUE)
   
-  # load needed packages on workers
-  clusterEvalQ(cl, {
-    library(MASS,sn)
-  })
   
   # export functions & objects used by workers
   clusterExport(
     cl,
-    c("u1_statistic","u2_statistic", "metric_skew_asym",
-      "s1_kernel", "s2_kernel", "D", "G",'sample_sizes','s_hat_j','sigma_hat','Asymp_test',
-      's_hat_vector'),
+    c(
+      "generate_matrices",
+      'metric_skew_fun',
+      'invert_matrices',
+      'average_squared_distances_inverted',
+      'average_squared_distances',
+      "Perm_test",
+      'u2_statistic_rcpp',
+      'pnorm',
+      'rorth',
+      'cov_vec0_log',
+      'distance_logeuclid_cpp',
+      'distance_to_inverse_logeuclid_cpp',
+      'vec0',
+      'logm_spd',
+      'imhof_cdf',
+      'distcov',
+      'Asymp_metric_skewness_spd',
+      'n',
+      "B", "dim", "sig"),
     envir = environment()
   )
   
-  proportions <- numeric(length(sample_sizes))
+  results_hhat         <- numeric(length(sample_sizes))
+  results_hhat_asym    <- numeric(length(sample_sizes))
   
-  for (k in seq_along(sample_sizes)) {
-    n <- sample_sizes[k]
+  
+  
+  
+  for (i in seq_along(sample_sizes)) {
+    n <- sample_sizes[i]
     
-    results <- mclapply(seq_len(nrep), function(r) {
+    
+    pvals <- parSapply(cl, seq_len(nrep), function(r) {
+      
+      
       mats <- generate_matrices(n, dim, mu, sig)
-      D <- distance_matrix(mats)
-      G <- distance_matrix_to_inverse(mats)
-      test <- Asymp_test(D, G)
-      test$p.value < alpha
-    }, mc.cores = ncores)
+      
+      D <- distance_logeuclid_cpp(mats)
+      G <- distance_to_inverse_logeuclid_cpp(mats)
+      
+      c(
+        Metric_perm  = Perm_test(mats, B,2,0)$p_value,
+        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
+      )
+      
+    })
     
-    proportions[k] <- mean(unlist(results))
-    cat(sprintf("n=%d -> rejection proportion = %.3f\n",
-                n, proportions[k]))
+    
+    results_hhat[i]      <- mean(pvals[1, ] < alpha, na.rm = TRUE)
+    results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
+    
+    
+    cat(
+      "Done n =", n,
+      "| metric perm:", round(results_hhat[i], 3),
+      "| metric asym:", round(results_hhat_asym[i], 3),"\n")
+    
   }
   
-  list(sample_sizes = sample_sizes, proportions = proportions)
+  
+  
+  list(sample_sizes = sample_sizes,
+       metric_perm = results_hhat,
+       metric_asym = results_hhat_asym)
 }
 
 
