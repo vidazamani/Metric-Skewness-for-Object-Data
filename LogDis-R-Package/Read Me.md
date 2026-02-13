@@ -93,8 +93,8 @@ If you prefer to work directly with the source C++ code:
 ```r
 library(Rcpp)
 
-sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
-sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/spd_distances.cpp")
+sourceCpp("/PATH/TO/u2_statistic_rcpp.cpp")
+sourceCpp("/PATH/TO/spd_distances.cpp")
 ```
 
 Note: Update the file paths to match their location on your computer.
