@@ -41,7 +41,7 @@ You can either:
 
 ```r
 install.packages("devtools")
-devtools::install("/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis")
+devtools::install("PATH/TO/LogDis")
 library(LogDis)
 ```
 
