@@ -670,12 +670,12 @@ ggplot(
 
 ## Mac
 level_test_parallel <- function(sample_sizes, 
-                                 dim, 
-                                 mu, 
-                                 sig,
-                                 nrep, 
-                                 B, 
-                                 alpha) {
+                                dim, 
+                                mu, 
+                                sig,
+                                nrep, 
+                                B, 
+                                alpha) {
   
   
   
@@ -735,91 +735,6 @@ level_test_parallel <- function(sample_sizes,
 }
 
 
-## Windows
-estimate_level_asymp <- function(sample_sizes, 
-                                 dim, 
-                                 mu, 
-                                 sig,
-                                 nrep, 
-                                 B, 
-                                 alpha) {
-  
-  ncores = detectCores() - 1
-  
-  # create cluster ONCE
-  cl <- makeCluster(ncores)
-  on.exit(stopCluster(cl), add = TRUE)
-  
-  
-  # export functions & objects used by workers
-  clusterExport(
-    cl,
-    c(
-      "generate_matrices",
-      'metric_skew_fun',
-      'invert_matrices',
-      'average_squared_distances_inverted',
-      'average_squared_distances',
-      "Perm_test",
-      'u2_statistic_rcpp',
-      'pnorm',
-      'rorth',
-      'cov_vec0_log',
-      'distance_logeuclid_cpp',
-      'distance_to_inverse_logeuclid_cpp',
-      'vec0',
-      'logm_spd',
-      'imhof_cdf',
-      'distcov',
-      'Asymp_metric_skewness_spd',
-      'n',
-      "B", "dim", "sig"),
-    envir = environment()
-  )
-  
-  results_hhat         <- numeric(length(sample_sizes))
-  results_hhat_asym    <- numeric(length(sample_sizes))
-  
-  
-  
-  
-  for (i in seq_along(sample_sizes)) {
-    n <- sample_sizes[i]
-    
-    
-    pvals <- parSapply(cl, seq_len(nrep), function(r) {
-      
-      
-      mats <- generate_matrices(n, dim, mu, sig)
-      
-      D <- distance_logeuclid_cpp(mats)
-      G <- distance_to_inverse_logeuclid_cpp(mats)
-      
-      c(
-        Metric_perm  = Perm_test(mats, B,2,0)$p_value,
-        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
-      )
-      
-    })
-    
-    
-    results_hhat[i]      <- mean(pvals[1, ] < alpha, na.rm = TRUE)
-    results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
-    
-    
-    cat(
-      "Done n =", n,
-      "| metric perm:", round(results_hhat[i], 3),
-      "| metric asym:", round(results_hhat_asym[i], 3),"\n")
-    
-  }
-  
-  
-  
-  list(sample_sizes = sample_sizes,
-       metric_perm = results_hhat,
-       metric_asym = results_hhat_asym)
-}
 
 
 
@@ -864,8 +779,8 @@ df_spd <- tibble(
   mutate(Dataset = "Azzalini")
 
 p_spd <- ggplot(df_spd,
-               aes(x = n, y = Rejection,
-                   color = Statistic, shape = Statistic)) +
+                aes(x = n, y = Rejection,
+                    color = Statistic, shape = Statistic)) +
   geom_line(linewidth = 0.9, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
