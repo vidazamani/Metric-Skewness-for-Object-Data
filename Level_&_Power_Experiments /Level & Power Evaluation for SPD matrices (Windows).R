@@ -713,7 +713,7 @@ level_test_parallel <- function(sample_sizes,
 
 
 
-set.seed(18)
+set.seed(1818)
 
 dim  <- 5
 mu   <- 0
