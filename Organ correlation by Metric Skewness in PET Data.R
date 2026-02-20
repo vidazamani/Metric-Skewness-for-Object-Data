@@ -494,7 +494,7 @@ res_6 <- pairwise_metric_tests(rest_data,
 res_subset <- pairwise_metric_tests(
   rest_data,
   organs = c("colon", "RML", "aorta"),
-  test_type = "perm", B = 10
+  test_type = "perm", B = 1000
 )
 
 adj_matrix <- build_graph_from_pvalues(res_subset, alpha = 0.05)
