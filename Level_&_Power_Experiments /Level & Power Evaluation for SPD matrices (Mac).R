@@ -41,20 +41,25 @@ generate_matrices <- function(sample_size,dim,mu,sig) {
   
 }
 
-matrices <- generate_matrices(5,3,0,1)
 
 
 
 # Step 2: Compute average squared distance using distcov
-average_squared_distances <- function(matrices) {
-  n <- dim(matrices)[3]
-  sapply(1:n, function(i) {
-    mean(sapply(1:n,
-                function(j) if (i != j) distcov(matrices[, , i],
-                                                matrices[, , j],
-                                                method ='LogEuclidean')^2 else 0))
-  })
-}
+# average_squared_distances <- function(matrices) {
+#   n <- dim(matrices)[3]
+#   sapply(1:n, function(i) {
+#     mean(sapply(1:n,
+#                 function(j) if (i != j) distcov(matrices[, , i],
+#                                                 matrices[, , j],
+#                                                 method ='LogEuclidean')^2 else 0))
+#   })
+# }
+
+
+
+
+# OR
+# rowMeans(distance_logeuclid_cpp(matrices))
 
 
 
@@ -70,15 +75,17 @@ invert_matrices <- function(matrices) {
 }
 
 # Step 4: Compute average squared distance for inverted matrices
-average_squared_distances_inverted <- function(matrices) {
-  iverted_matrices <- invert_matrices(matrices)
-  n <- dim(matrices)[3]
-  sapply(1:n, function(i) {
-    mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j],
-                                         method ='LogEuclidean')^2))
-  })
-}
+# average_squared_distances_inverted <- function(matrices) {
+#   iverted_matrices <- invert_matrices(matrices)
+#   n <- dim(matrices)[3]
+#   sapply(1:n, function(i) {
+#     mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j],
+#                                          method ='LogEuclidean')^2))
+#   })
+# }
 
+# OR
+# rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
 
 
 # --------------------------------------------------------
@@ -88,11 +95,14 @@ average_squared_distances_inverted <- function(matrices) {
 metric_skew_fun <- function(matrices) {
   
   # Step 2: Compute average squared distance for original matrices
-  avg_dist_original <- average_squared_distances(matrices)
+  avg_dist_original <- rowMeans(distance_logeuclid_cpp(matrices))
+  # avg_dist_original <- average_squared_distances(matrices)
   
   
   # Step 3: Compute average squared distance for inverted matrices
-  avg_dist_inverted <- average_squared_distances_inverted(matrices)
+  avg_dist_inverted <- rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
+  # avg_dist_inverted <- average_squared_distances_inverted(matrices)
+
   
   # Step 4: Compute the final average squared distance
   final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)/mean(avg_dist_original^2)
@@ -104,10 +114,7 @@ metric_skew_fun <- function(matrices) {
 
 ############ Permutation test ##################################
 
-Perm_test <- function(matrices, iter, seed, regularize){
-  
-  
-  set.seed(seed)
+Perm_test <- function(matrices, iter, regularize){
   
   
   
@@ -143,9 +150,8 @@ Perm_test <- function(matrices, iter, seed, regularize){
   result
 }
 
-
-Perm_test(matrices,20,2,0)
-
+matrices <- generate_matrices(5,3,0,1)
+Perm_test(matrices,20,0)
 
 
 
@@ -456,7 +462,7 @@ Asymp_metric_skewness_spd <- function(mats) {
   n <- dim(mats)[3]
   if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
   
-  # 1) Log–Euclidean distances
+  # 1) Log–Euclidean distances (it is actullay Frobenius norm squared)
   D <- distance_logeuclid_cpp(mats)
   G <- distance_to_inverse_logeuclid_cpp(mats)
   
@@ -535,11 +541,11 @@ power_fixed_n <- function(
       
       mats <- generate_matrices(n, dim, mu_skew, sig)
       
-      D <- distance_logeuclid_cpp(mats)
-      G <- distance_to_inverse_logeuclid_cpp(mats)
+      # D <- distance_logeuclid_cpp(mats)
+      # G <- distance_to_inverse_logeuclid_cpp(mats)
       
       c(
-        Metric_perm  = Perm_test(mats, B,2,0)$p_value,
+        Metric_perm  = Perm_test(mats, B,0)$p_value,
         Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
       )
       
@@ -583,7 +589,7 @@ power_fixed_n <- function(
 
 
 
-mu <- seq(0,0.05,0.01)
+mu <- seq(0,0.06,0.01)
 dim <- 3
 sig <- 0.05
 nrep <- 1000
@@ -604,6 +610,10 @@ end <- Sys.time()
 
 start <- Sys.time()
 res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig)
+end <- Sys.time()
+
+start <- Sys.time()
+res_n200 <- power_fixed_n(n = 200, dim, mu, sig, nrep  , B, sig)
 end <- Sys.time()
 
 running_time <- end - start
@@ -633,8 +643,62 @@ df_n100 <- res_n100 |>
   ) |>
   mutate(n = 100)
 
-df_power <- bind_rows(df_n20, df_n50, df_n100)
+df_n200 <- res_n200 |>
+  pivot_longer(
+    cols = -mu,
+    names_to = "Test",
+    values_to = "Power"
+  ) |>
+  mutate(n = 200)
 
+df_power <- bind_rows(df_n20, df_n50, df_n100, df_n200)
+
+df_power$Test <- factor(df_power$Test,
+                        levels = c("Metric_perm", "Metric_asymp"),
+                        labels = c("Permutation", "Asymptotic"))
+
+df_power$n <- factor(df_power$n)
+
+ggplot(
+  df_power,
+  aes(x = mu,
+      y = Power,
+      color = Test,
+      linetype = Test,
+      group = Test)
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.8) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.6
+  ) +
+  facet_wrap(~ n, nrow = 2,
+             labeller = labeller(n = function(x) paste0("n = ", x))) +
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +  # colorblind-safe
+  scale_y_continuous(
+    limits = c(-0.03, 1),
+    breaks = seq(0, 1, 0.2),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+  labs(
+    x = expression(mu),
+    y = "Power",
+    color = "Test",
+    linetype = "Test"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    panel.grid = element_blank(),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
+  )
 
 
 ggplot(
@@ -652,7 +716,7 @@ ggplot(
   facet_wrap(~ n, labeller = label_both) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
-    x = expression("mu"),
+    x = expression(mu),
     y = "Power",
     title = "Power Comparison under Cov matrices Data"
   ) +
@@ -664,7 +728,36 @@ ggplot(
   )
 
 
-
+# p <- ggplot(df_power,
+#             aes(x = mu,
+#                 y = Power,
+#                 color = Test,
+#                 linetype = n,
+#                 group = interaction(Test, n))) +
+#   geom_line(linewidth = 1) +
+#   geom_hline(
+#     yintercept = 0.05,
+#     linetype = "dashed",
+#     color = "black",
+#     linewidth = 0.7
+#   )+
+#   geom_point(size = 2) +
+#   scale_y_continuous(limits = c(0, 1),
+#                      breaks = seq(0, 1, 0.2)) +
+#   labs(
+#     x = expression(mu),
+#     y = "Power",
+#     color = "Test",
+#     linetype = "Sample size (n)"
+#   ) +
+#   theme_minimal(base_size = 13) +
+#   theme(
+#     legend.position = "right",
+#     legend.title = element_text(face = "bold"),
+#     panel.grid.minor = element_blank()
+#   )
+# 
+# p
 
 ############# Level evaluation - Simulation across sample sizes to estimate level
 
@@ -700,11 +793,11 @@ level_test_parallel <- function(sample_sizes,
       
       mats <- generate_matrices(n, dim, mu, sig)
       
-      D <- distance_logeuclid_cpp(mats)
-      G <- distance_to_inverse_logeuclid_cpp(mats)
+      # D <- distance_logeuclid_cpp(mats)
+      # G <- distance_to_inverse_logeuclid_cpp(mats)
       
       c(
-        Metric_perm  = Perm_test(mats, B,2,0)$p_value,
+        Metric_perm  = Perm_test(mats, B,0)$p_value,
         Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
       )
       
@@ -739,16 +832,16 @@ level_test_parallel <- function(sample_sizes,
 
 
 
-set.seed(1)
+set.seed(111)
 
-dim  <- 5
+dim  <- 3
 mu   <- 0
 sig  <- 0.5
 alpha <- 0.05
-sample_sizes <- c(5, 10, 15,20)
+sample_sizes <- seq(10,300,20)
 
-nrep <- 50     
-B <- 100
+nrep <- 1000     
+B <- 500
 
 level_cov <- level_test_parallel(
   sample_sizes = sample_sizes,
@@ -784,17 +877,54 @@ p_spd <- ggplot(df_spd,
   geom_line(linewidth = 0.9, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
-             linetype = "dashed", color = "red") +
-  scale_color_manual(values = c("black", "blue",'green','purple')) +
-  scale_shape_manual(values = c(19, 17,18,15)) +
+             linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  scale_shape_manual(values = c(19, 17)) +
   labs(
     title = "Level Evaluation (Cov Data)",
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   ) + 
-  ylim(0, 0.5) +
+  ylim(0, 0.1) +
   theme_minimal(base_size = 12) +
   theme(
     legend.position = "bottom",
     panel.grid.minor = element_blank()
+  )
+
+
+
+df_spd$Statistic <- factor(df_spd$Statistic)
+
+ggplot(df_spd,
+       aes(x = n,
+           y = Rejection,
+           color = Statistic,
+           shape = Statistic,
+           group = Statistic)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed",
+             color = "black",
+             linewidth = 0.5) +
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  scale_shape_manual(values = c(16, 17)) +
+  scale_y_continuous(
+    breaks = seq(0, 0.1, 0.02),
+    expand = c(0, 0)
+  ) +
+  coord_cartesian(ylim = c(0, 0.1)) +
+  labs(
+    x = "Sample size",
+    y = expression("Rejection proportion  (" * alpha == 0.05 * ")"),
+    color = "Statistic",
+    shape = "Statistic"
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
   )
