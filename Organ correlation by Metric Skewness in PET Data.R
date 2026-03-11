@@ -1,4 +1,3 @@
-
 ## Libraries 
 library(dplyr)
 Sys.setenv(RGL_USE_NULL=TRUE)
@@ -7,26 +6,19 @@ library(ICtest)
 library(ggplot2)
 library(fda)
 library(igraph)
+library(parallel)
+library(shapes)
+library(readxl)
+library(dplyr)
 
 #####
 remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
 library(LogDis)
 
 
-# Step 2: Compute average squared distance using distcov
-average_squared_distances <- function(matrices) {
-  n <- dim(matrices)[3]
-  sapply(1:n, function(i) {
-    mean(sapply(1:n,
-                function(j) if (i != j) distcov(matrices[, , i],
-                                                matrices[, , j],
-                                                method ='LogEuclidean')^2 else 0))
-  })
-}
 
 
-
-# Step 3: Invert all generated matrices
+# Invert all matrices function
 invert_matrices <- function(matrices) {
   n <- dim(matrices)[3] # Number of matrices
   dim <- dim(matrices)[1] # Dimension of each matrix
@@ -37,15 +29,6 @@ invert_matrices <- function(matrices) {
   return(inverted_matrices)
 }
 
-# Step 4: Compute average squared distance for inverted matrices
-average_squared_distances_inverted <- function(matrices) {
-  iverted_matrices <- invert_matrices(matrices)
-  n <- dim(matrices)[3]
-  sapply(1:n, function(i) {
-    mean(sapply(1:n, function(j) distcov(matrices[, , i], iverted_matrices[, , j],
-                                         method ='LogEuclidean')^2))
-  })
-}
 
 
 
@@ -56,11 +39,14 @@ average_squared_distances_inverted <- function(matrices) {
 metric_skew_fun <- function(matrices) {
   
   # Step 2: Compute average squared distance for original matrices
-  avg_dist_original <- average_squared_distances(matrices)
+  avg_dist_original <- rowMeans(distance_logeuclid_cpp(matrices))
+  # avg_dist_original <- average_squared_distances(matrices)
   
   
   # Step 3: Compute average squared distance for inverted matrices
-  avg_dist_inverted <- average_squared_distances_inverted(matrices)
+  avg_dist_inverted <- rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
+  # avg_dist_inverted <- average_squared_distances_inverted(matrices)
+  
   
   # Step 4: Compute the final average squared distance
   final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)/mean(avg_dist_original^2)
@@ -72,221 +58,49 @@ metric_skew_fun <- function(matrices) {
 
 ############ Permutation test ##################################
 
-Perm_test <- function(matrices, iter, seed, regularize){
-  
+flip_cov <- function(S) {
+  S_flipped <- S
+  S_flipped[1,2] <- -S_flipped[1,2]
+  S_flipped[2,1] <- -S_flipped[2,1]
+  S_flipped
+}
+
+
+Perm_test <- function(matrices, iter, seed){
   
   set.seed(seed)
   
-  
-  
-  # Compute the observed Metric Skewness
   T0 <- metric_skew_fun(matrices)
   
   n <- dim(matrices)[3]
   Tperm <- numeric(iter)
   
-  for(b in 1:iter) {
-    # random flips: TRUE = invert, FALSE = keep
+  for(b in 1:iter){
+    
     flips <- sample(c(TRUE, FALSE), n, replace = TRUE)
-    perm_sample <- array(0, dim = dim(matrices))
-    for(i in 1:n) {
-      if(flips[i]) {
-        A <- matrices[,,i]
-        if(regularize > 0) A <- A + regularize * diag(dim(generate_matrices(sample_size, dim, mu, sig))[1])
-        perm_sample[,,i] <- solve(A)
-      } else {
-        perm_sample[,,i] <- matrices[,,i]
+    
+    perm_sample <- matrices
+    
+    for(i in 1:n){
+      if(flips[i]){
+        perm_sample[,,i] <- flip_cov(matrices[,,i])
       }
     }
+    
     Tperm[b] <- metric_skew_fun(perm_sample)
   }
   
-  
-  
-  
   pval <- mean(abs(Tperm) >= abs(T0))
   
-  result <-list(statistic = T0, p.value = pval, Tperm = Tperm)
-  names(result) <- c("observed statistic","p_value", "permutation stats")
-  result
+  list(statistic = T0, p_value = pval, Tperm = Tperm)
 }
 
 
-###### U statistics
-
-
-u1_statistic <- function(D) {
-  n <- nrow(D)
-  total <- 0
-  
-  for (i in 1:(n - 2)) {
-    for (j in (i + 1):(n - 1)) {
-      Dij <- D[i, j]
-      
-      for (k in (j + 1):n) {
-        Dik <- D[i, k]
-        Djk <- D[j, k]
-        
-        total <- total +
-          Dij * Dik +
-          Djk * Dij +
-          Dik * Djk
-      }
-    }
-  }
-  
-  total / (3 * choose(n, 3))
-}
-
-
-
-u2_statistic <- function(D, G) {
-  n <- nrow(D)
-  total <- 0
-  
-  if (n < 3) {
-    stop("U2 statistic requires at least n >= 3 observations.")
-  }
-  
-  stopifnot(
-    is.matrix(D), is.matrix(G),
-    nrow(D) == ncol(D),
-    nrow(G) == ncol(G),
-    nrow(D) == nrow(G)
-  )
-  
-  total <- 0
-  
-  
-  for (i in 1:(n - 2)) {
-    for (j in (i + 1):(n - 1)) {
-      Dij <- D[i, j] - G[i, j]
-      
-      for (k in (j + 1):n) {
-        Dik <- D[i, k] - G[i, k]
-        Djk <- D[j, k] - G[j, k]
-        
-        total <- total +
-          Dij * Dik +   # r(i, j, k)
-          Djk * Dij +   # r(j, k, i)
-          Dik * Djk     # r(k, i, j)
-      }
-    }
-  }
-  
-  total / (3 * choose(n, 3))
-}
-
-
-
-
-vec0 <- function(S) {
-  # S: p x p symmetric matrix
-  p <- nrow(S)
-  out <- numeric(p * (p + 1) / 2)
-  idx <- 1L
-  for (j in 1:p) {
-    for (i in 1:j) {
-      if (i == j) {
-        out[idx] <- S[i, j]
-      } else {
-        out[idx] <- sqrt(2) * S[i, j]
-      }
-      idx <- idx + 1L
-    }
-  }
-  out
-}
-
-
-
-
-##### Sigma hat
-
-logm_spd <- function(X) {
-  # X: p x p SPD matrix
-  ee <- eigen(X, symmetric = TRUE)
-  Q  <- ee$vectors
-  d  <- ee$values
-  if (any(d <= 0)) stop("Matrix not SPD (non-positive eigenvalues).")
-  Q %*% diag(log(d), length(d)) %*% t(Q)
-}
-
-
-cov_vec0_log <- function(mats) {
-  # mats: p x p x n
-  n <- dim(mats)[3]
-  V <- lapply(seq_len(n), function(i) vec0(logm_spd(mats[,,i])))
-  V <- do.call(rbind, V)  # n x q, q = p(p+1)/2
-  cov(V)                  # sample covariance (q x q)
-}
-
-
-imhof_cdf <- function(x, weights) {
-  res <- CompQuadForm::imhof(q = x, 
-                             lambda = weights,
-                             epsabs = 1e-15, 
-                             epsrel = 1e-15)
-  
-  res$Qq
-}
 
 
 
 
 #################################################################
-
-#### Asymptotic Test
-
-Asymp_metric_skewness_spd <- function(mats) {
-  # mats: p x p x n SPD array
-  n <- dim(mats)[3]
-  if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
-  
-  # 1) Log–Euclidean distances
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
-  
-  
-  # 2) U2 from Rcpp
-  U2 <- u2_statistic_rcpp(D, G)
-  
-  # 3) Sigma from vec0(log(X))
-  Sigma_hat <- cov_vec0_log(mats)
-  
-  
-  
-  # 4) Eigenvalues and trace(Sigma^2)
-  eigvals <- eigen(Sigma_hat, symmetric = TRUE, only.values = TRUE)$values
-  theta_sq <- eigvals^2
-  trSigma2 <- sum(theta_sq)  # = tr(Sigma_hat^2)
-  
-  # 5) Test statistic (correct parentheses)
-  Tn <- (n * U2) / 16 + trSigma2
-  
-  # # 6) Upper-tail p-value under weighted chi-square limit
-  cdf_val <- imhof_cdf(Tn, theta_sq)
-  pval <- cdf_val
-  
-  
-  # # 6) CDF via Imhof
-  # cdf_val <- imhof_cdf(Tn, theta_sq)
-  # 
-  # # two-sided p-value
-  # pval <- 2 * min(cdf_val, 1 - cdf_val)
-  # 
-  # # keep within [0,1] numerically
-  # pval <- min(max(pval, 0), 1)
-  
-  list(
-    statistic = Tn,
-    p.value = pval,
-    U2 = U2,
-    trSigma2 = trSigma2,
-    eigenvalues = eigvals
-  )
-}
-
 
 ################ Import data ######################
 ### There are 102 patients all together 
@@ -326,7 +140,6 @@ rest_data   <- lapply(rest_files, read_with_organs)
 stress_data <- lapply(stress_files, read_with_organs)
 
 
-
 get_pair_covariances <- function(data_list, organA, organB) {
   
   n_patients <- length(data_list)
@@ -337,9 +150,8 @@ get_pair_covariances <- function(data_list, organA, organB) {
     patient_df <- data_list[[i]]
     
     # Extract numeric time columns
-    numeric_mat <- as.matrix(
-      patient_df[, sapply(patient_df, is.numeric)]
-    )
+    numeric_mat <- as.matrix(patient_df[,-1])
+    
     
     # Set row names to organ names
     rownames(numeric_mat) <- patient_df$organ
@@ -351,7 +163,10 @@ get_pair_covariances <- function(data_list, organA, organB) {
     
     Xi <- t(numeric_mat[c(organA, organB), ])
     
-    S_array[, , i] <- cov(Xi)
+    S <- cov(Xi)
+    S <- S + 1e-6 * diag(2)
+    #S_array[, , i] <- cov(Xi)
+    S_array[, , i] <- S
   }
   
   S_array
@@ -359,6 +174,9 @@ get_pair_covariances <- function(data_list, organA, organB) {
 
 
 get_pair_covariances(rest_data,'heart' ,'spleen')
+get_pair_covariances(stress_data,'heart' ,'spleen')
+
+
 
 get_organ_names <- function(data_list) {
   patient_df <- data_list[[1]]
@@ -367,74 +185,80 @@ get_organ_names <- function(data_list) {
 
 
 
-pairwise_metric_tests <- function(data_list,
-                                  organs = NULL,
-                                  n_organs = NULL,
-                                  test_type = c("perm", "asymp"),
-                                  B ,
-                                  alpha = 0.05,
-                                  seed = 1818) {
+
   
-  test_type <- match.arg(test_type)
+
+
+pairwise_metric_tests_parallel <- function(
+    data_list,
+    organs = NULL,
+    n_organs = NULL,
+    B,
+    alpha = 0.05,
+    seed = 1818
+) {
+  
+
+  ncores <- detectCores() - 1
   
   all_organs <- get_organ_names(data_list)
   
   # ----- Organ selection logic -----
   
-  if (!is.null(n_organs)) {
-    if (!is.null(seed)) set.seed(seed)
+  if (!is.null(organs)) {
+    
+    # Scenario 1: user provided organ vector
+    if (!all(organs %in% all_organs)) {
+      stop("Some selected organs not found in dataset.")
+    }
+    
+  } else if (!is.null(n_organs)) {
+    
+    # Scenario 2: randomly sample organs
+    set.seed(seed)
     organs <- sample(all_organs, n_organs)
-  }
-  
-  if (is.null(organs)) {
+    
+  } else {
+    
+    # Scenario 3: use all organs
     organs <- all_organs
-  }
-  
-  if (!all(organs %in% all_organs)) {
-    stop("Some selected organs not found in dataset.")
+    
   }
   
   # ----------------------------------
   
   pairs <- combn(organs, 2, simplify = FALSE)
-  n_pairs <- length(pairs)
   
-  results <- data.frame(
-    organA = character(n_pairs),
-    organB = character(n_pairs),
-    p_value = numeric(n_pairs),
-    stringsAsFactors = FALSE
-  )
-  
-  for (k in seq_along(pairs)) {
+  results_list <- mclapply(seq_along(pairs), function(k) {
     
     organA <- pairs[[k]][1]
     organB <- pairs[[k]][2]
     
     S_array <- get_pair_covariances(data_list, organA, organB)
     
-    if (test_type == "perm") {
-      test_res <- Perm_test(S_array, B, seed = 1, regularize = 0)
-      pval <- test_res$p_value
-    } else {
-      test_res <- Asymp_metric_skewness_spd(S_array)
-      pval <- test_res$p.value
-    }
-    
-    results$organA[k] <- organA
-    results$organB[k] <- organB
-    results$p_value[k] <- pval
+    test_res <- Perm_test(S_array, B, seed)
+    pval <- test_res$p_value
     
     cat("Done pair:", organA, "-", organB,
         "p =", round(pval, 4), "\n")
-  }
+    
+    data.frame(
+      organA = organA,
+      organB = organB,
+      p_value = pval,
+      stringsAsFactors = FALSE
+    )
+    
+  }, mc.cores = ncores)
+  
+  results <- do.call(rbind, results_list)
+  rownames(results) <- NULL
   
   results
 }
 
 
-
-
+############# Graph ########
 
 
 build_graph_from_pvalues <- function(results, alpha = 0.05) {
@@ -472,7 +296,7 @@ plot_organ_graph <- function(adj_matrix) {
   g <- graph_from_adj(adj_matrix)
   
   plot(g,
-       layout = layout_with_fr(g),   # Fruchterman-Reingold layout
+       layout = layout_with_fr(g), # Fruchterman-Reingold layout # or layout_in_circle(g)   
        vertex.size = 30,
        vertex.label.cex = 0.8,
        edge.width = 2)
@@ -480,131 +304,120 @@ plot_organ_graph <- function(adj_matrix) {
 
 
 
-### Example
+######### Examples 
 
-
-res_all <- pairwise_metric_tests(rest_data, test_type = "asymp")
-res_all <- pairwise_metric_tests(rest_data, test_type = "perm", 5)
-
-res_6 <- pairwise_metric_tests(rest_data,
-                               n_organs = 6,
-                               seed = 123,
-                               test_type = "perm", B = 5)
-
-res_subset <- pairwise_metric_tests(
+# Scenario 1 — Specific organs
+res_subset <- pairwise_metric_tests_parallel(
   rest_data,
-  organs = c("colon", "RML", "aorta"),
-  test_type = "perm", B = 1000
+  organs = c("heart","colon","LUL"),
+  B = 5000
 )
+
+# Scenario 2 — Random subset
+
+res_subset <- pairwise_metric_tests_parallel(
+  rest_data,
+  n_organs = 6,
+  seed = 123,
+  B = 500
+)
+
+# Scenario 3 — All organs
+
+res_all <- pairwise_metric_tests_parallel(
+  rest_data,
+  B = 1000
+)
+
+
 
 adj_matrix <- build_graph_from_pvalues(res_subset, alpha = 0.05)
 adj_matrix <- build_graph_from_pvalues(res_all, alpha = 0.05)
 
 plot_organ_graph(adj_matrix)
 
+#### Full verjon of permutation test where we have the metric skewness value
 
-
-
-############################################################
-pairwise_metric_tests_full <- function(data_list,
-                                       organs = NULL,
-                                       n_organs = NULL,
-                                       B ,
-                                       alpha = 0.05,
-                                       seed = NULL) {
+pairwise_metric_tests_parallel <- function(
+    data_list,
+    organs = NULL,
+    n_organs = NULL,
+    B,
+    alpha = 0.05,
+    seed = 1818
+) {
   
-  # ----- Organ selection -----
-  all_organs <- data_list[[1]]$organ
+
+  ncores <- detectCores() - 1
   
-  if (!is.null(n_organs)) {
-    if (!is.null(seed)) set.seed(seed)
+  all_organs <- get_organ_names(data_list)
+  
+  # ----- Organ selection logic -----
+  
+  if (!is.null(organs)) {
+    
+    # Scenario 1: user provided organ vector
+    if (!all(organs %in% all_organs)) {
+      stop("Some selected organs not found in dataset.")
+    }
+    
+  } else if (!is.null(n_organs)) {
+    
+    # Scenario 2: randomly sample organs
+    set.seed(seed)
     organs <- sample(all_organs, n_organs)
-  }
-  
-  if (is.null(organs)) {
+    
+  } else {
+    
+    # Scenario 3: use all organs
     organs <- all_organs
+    
   }
   
-  if (!all(organs %in% all_organs)) {
-    stop("Some selected organs not found.")
-  }
+  # ----------------------------------
   
   pairs <- combn(organs, 2, simplify = FALSE)
-  n_pairs <- length(pairs)
   
-  results <- data.frame(
-    organA = character(n_pairs),
-    organB = character(n_pairs),
-    perm_pvalue = numeric(n_pairs),
-    asymp_pvalue = numeric(n_pairs),
-    metric_skew_perm = numeric(n_pairs),
-    U2 = numeric(n_pairs),
-    U1 = numeric(n_pairs),
-    effect_size_U2_over_U1 = numeric(n_pairs),
-    stringsAsFactors = FALSE
-  )
-  
-  for (k in seq_along(pairs)) {
+  results_list <- mclapply(seq_along(pairs), function(k) {
     
     organA <- pairs[[k]][1]
     organB <- pairs[[k]][2]
     
-    # ----- Get covariance matrices -----
     S_array <- get_pair_covariances(data_list, organA, organB)
     
-    # ----- Compute distance matrices -----
-    D <- distance_logeuclid_cpp(S_array)
-    G <- distance_to_inverse_logeuclid_cpp(S_array)
+    # weight = metric skewness
+    skew_value <- metric_skew_fun(S_array)
     
-    # ----- U-statistics -----
-    U1 <- u1_statistic(D)
-    U2 <- u2_statistic_rcpp(D, G)
+    # permutation test
+    test_res <- Perm_test(S_array, B, seed + k)
+    pval <- test_res$p_value
     
-    effect_size <- U2 / U1
+    cat("Done pair:", organA, "-", organB,
+        "| skew =", round(skew_value,4),
+        "| p =", round(pval,4), "\n")
     
-    # ----- Metric skewness used in permutation -----
-    metric_skew_value <- metric_skew_fun(S_array)
-    
-    # ----- Permutation test -----
-    perm_res <- Perm_test(S_array, B, seed = 1, regularize = 0)
-    perm_p <- perm_res$p_value
-    
-    # ----- Asymptotic test -----
-    asymp_res <- Asymp_metric_skewness_spd(S_array)
-    asymp_p <- asymp_res$p.value
-    
-    # ----- Store results -----
-    results[k, ] <- c(
-      organA,
-      organB,
-      perm_p,
-      asymp_p,
-      metric_skew_value,
-      U2,
-      U1,
-      effect_size
+    data.frame(
+      organA = organA,
+      organB = organB,
+      metric_skewness = skew_value,
+      p_value = pval,
+      stringsAsFactors = FALSE
     )
     
-    cat("Done:", organA, "-", organB,
-        "| perm =", round(perm_p, 4),
-        "| asymp =", round(asymp_p, 4),
-        "| Metric Skewness", round(metric_skew_value,4),
-        "| effect =", round(effect_size, 4), "\n")
-  }
+  }, mc.cores = ncores)
+  
+  results <- do.call(rbind, results_list)
+  rownames(results) <- NULL
   
   results
 }
 
+##### Weighted Graph
 
 
-
-
-
-
-build_graph_from_results <- function(results,
-                                     p_col = "perm_pvalue",
-                                     alpha = 0.05) {
+build_weighted_graph <- function(results) {
   
+
   organs <- unique(c(results$organA, results$organB))
   p <- length(organs)
   
@@ -613,155 +426,393 @@ build_graph_from_results <- function(results,
   
   for (i in seq_len(nrow(results))) {
     
-    if (!is.na(results[[p_col]][i]) &&
-        results[[p_col]][i] < alpha) {
-      
-      A <- results$organA[i]
-      B <- results$organB[i]
-      
-      adj[A, B] <- 1
-      adj[B, A] <- 1
-    }
+    A <- results$organA[i]
+    B <- results$organB[i]
+    
+    
+      w <- as.numeric(results$metric_skewness[i])
+    
+    
+    adj[A, B] <- w
+    adj[B, A] <- w
   }
   
-  graph_from_adjacency_matrix(adj,
-                              mode = "undirected",
-                              diag = FALSE)
+  adj
 }
-
-
-
-
-build_weighted_graph <- function(results,
-                                 weight_col = "effect_size_U2_over_U1",
-                                 p_filter = TRUE,
-                                 p_col = "perm_pvalue",
-                                 alpha = 0.05) {
-  
-  edges <- results
-  
-  if (p_filter) {
-    edges <- edges[edges[[p_col]] < alpha, ]
-  }
-  
-  edges$weight_numeric <- as.numeric(edges[[weight_col]])
-  
-  g <- graph_from_data_frame(
-    d = data.frame(
-      from = edges$organA,
-      to   = edges$organB,
-      weight = edges$weight_numeric
-    ),
-    directed = FALSE
-  )
-  
-  g
-}
-
-
-plot_organ_graph <- function(g,
-                             vertex_size = 30,
-                             show_weights = FALSE) {
-  
-  if (show_weights) {
-    E(g)$label <- round(E(g)$weight, 3)
-  }
-  
-  plot(g,
-       layout = layout_with_fr(g),
-       vertex.size = vertex_size,
-       vertex.label.cex = 0.9,
-       edge.width = 2 + 5 * E(g)$weight,
-       main = "Organ Connectivity Graph")
-}
-
-
 
 
 
 #### Example
 
-res_subset <- pairwise_metric_tests_full(rest_data, organs = c("heart", "spleen", "LLL"), B =5)
+
+res_all_rest <- pairwise_metric_tests_parallel(
+  rest_data,
+  B = 1000
+)
+
+res_all_stress <- pairwise_metric_tests_parallel(
+  stress_data,
+  B = 1000
+)
 
 
-g_perm <- build_graph_from_results(res_subset,
-                                   p_col = "perm_pvalue",
-                                   alpha = 0.05)
-
-plot_organ_graph(g_perm)
 
 
-g_weighted <- build_weighted_graph(res_subset)
-plot_organ_graph(g_weighted, show_weights = TRUE)
+adj_weighted_rest <- build_weighted_graph(res_all_rest)
+adj_weighted_stress <- build_weighted_graph(res_all_stress)
 
 
+thr <- quantile(adj_weighted_rest[adj_weighted_rest > 0], 0.13)
+
+adj_filtered <- adj_weighted_rest
+adj_filtered[adj_filtered < thr] <- 0
+
+g_rest <- graph_from_adjacency_matrix(adj_filtered,
+                                 mode = "undirected",
+                                 weighted = TRUE,
+                                 diag = FALSE)
+
+w <- abs(E(g_rest)$weight)
+
+w_scaled <- log1p(w)
+w_scaled <- 1 + 5*(w_scaled - min(w_scaled)) /
+  (max(w_scaled) - min(w_scaled))
+
+plot(
+  g_rest,
+  layout = layout_with_fr(g_rest),
+  vertex.size = 35,
+  edge.width = w_scaled,
+  vertex.label.cex = 0.8
+)
+
+
+
+
+thr <- quantile(adj_weighted_stress[adj_weighted_stress > 0], 0.13)
+
+adj_filtered <- adj_weighted_stress
+adj_filtered[adj_filtered < thr] <- 0
+
+g_stress <- graph_from_adjacency_matrix(adj_filtered,
+                                      mode = "undirected",
+                                      weighted = TRUE,
+                                      diag = FALSE)
+
+w <- abs(E(g_stress)$weight)
+
+w_scaled <- log1p(w)
+w_scaled <- 1 + 5*(w_scaled - min(w_scaled)) /
+  (max(w_scaled) - min(w_scaled))
+
+plot(
+  g_stress,
+  layout = layout_with_fr(g_stress),
+  vertex.size = 35,
+  edge.width = w_scaled,
+  vertex.label.cex = 0.8
+)
+
+
+
+
+# mod_rest   <- modularity(cluster_louvain(g_rest))
+# mod_stress <- modularity(cluster_louvain(g_stress))
+# 
+# mod_rest > mod_stress
+
+
+
+
+clusters <- cluster_louvain(g_rest)
+membership(clusters)
+modularity(clusters)
 
 
 ############ Extra ############################
-find_maximal_cliques <- function(adj_matrix) {
-  
-  g <- graph_from_adjacency_matrix(adj_matrix,
-                                   mode = "undirected",
-                                   diag = FALSE)
-  
-  cliques(g)
-}
+# find_maximal_cliques <- function(adj_matrix) {
+#   
+#   g <- graph_from_adjacency_matrix(adj_matrix,
+#                                    mode = "undirected",
+#                                    diag = FALSE)
+#   
+#   cliques(g)
+# }
+# 
+# find_maximal_cliques(adj_matrix)
+# 
+# largest_clique <- function(adj_matrix) {
+#   
+#   g <- graph_from_adjacency_matrix(adj_matrix,
+#                                    mode = "undirected",
+#                                    diag = FALSE)
+#   
+#   max_cliques(g)
+# }
+# 
+# largest_clique(adj_matrix)
+# 
+# 
+# 
+# 
+# 
+# graph_shape_summary <- function(adj_matrix) {
+#   
+#   g <- graph_from_adj(adj_matrix)
+#   
+#   list(
+#     n_nodes = vcount(g),
+#     n_edges = ecount(g),
+#     density = edge_density(g),
+#     n_components = components(g)$no,
+#     diameter = diameter(g, directed = FALSE),
+#     avg_clustering = transitivity(g, type = "average"),
+#     max_clique_size = max(sapply(cliques(g), length))
+#   )
+# }
+# 
+# graph_shape_summary(adj_matrix)
+# 
+# 
+# centrality_summary <- function(adj_matrix) {
+#   
+#   g <- graph_from_adj(adj_matrix)
+#   
+#   data.frame(
+#     organ = V(g)$name,
+#     degree = degree(g),
+#     betweenness = betweenness(g),
+#     closeness = closeness(g)
+#   )
+# }
+# 
+# 
+# centrality_summary(adj_matrix)
+# 
+# detect_communities <- function(adj_matrix) {
+#   
+#   g <- graph_from_adj(adj_matrix)
+#   cluster_louvain(g)
+# }
+# 
+# 
+# detect_communities(adj_matrix)
+# 
+# 
+# 
+# 
+# 
+# 
 
-find_maximal_cliques(adj_matrix)
-
-largest_clique <- function(adj_matrix) {
-  
-  g <- graph_from_adjacency_matrix(adj_matrix,
-                                   mode = "undirected",
-                                   diag = FALSE)
-  
-  max_cliques(g)
-}
-
-largest_clique(adj_matrix)
 
 
+###########################
+
+
+clinical_data <- read_excel("/Users/vizama/Documents/Papers/2nd paper/Dataset/excel_aboutKoveriData.xlsx")
+
+
+clinical_data <- clinical_data %>%
+  mutate(across(everything(),
+                ~na_if(., "NA"))) %>%
+  mutate(across(everything(),
+                ~na_if(., "")))
+# Remove rows with ANY NA
+clinical_data_clean <- clinical_data %>%
+  filter(complete.cases(.))
+
+# Extract patient IDs from filenames
+rest_ids <- sub("_rest_15tacs.csv", "", rest_files)
+stress_ids <- sub("_stress_15tacs.csv", "", stress_files)
+
+rest_ids
+
+rest_data   <- lapply(rest_files, read_with_organs)
+stress_data <- lapply(stress_files, read_with_organs)
+
+
+names(rest_data)   <- rest_ids
+names(stress_data) <- stress_ids
+
+
+valid_ids <- clinical_data_clean$study_code
+
+rest_data_clean <- rest_data[names(rest_data) %in% valid_ids]
+stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
+
+# clinical_numeric <- clinical_data_clean %>%
+#   mutate(
+#     weight = as.numeric(gsub(",", ".", weight_in_kg)),
+#     height = as.numeric(gsub(",", ".", height_in_cm))
+#   )
+# 
+# clinical_numeric <- clinical_numeric %>%
+#   mutate(
+#     BMI = weight / (height / 100)^2
+#   )
+# 
+# 
+# summary(clinical_numeric$weight)
+# summary(clinical_numeric$height)
+# summary(clinical_numeric$BMI)
+# 
+# sd(clinical_numeric$weight, na.rm = TRUE)
+# sd(clinical_numeric$BMI, na.rm = TRUE)
+# 
+# range(clinical_numeric$weight, na.rm = TRUE)
+# range(clinical_numeric$BMI, na.rm = TRUE)
+# 
+# 
+# compute_patient_integration <- function(patient_df) {
+#   
+#   # extract numeric time columns
+#   numeric_mat <- as.matrix(
+#     patient_df[, sapply(patient_df, is.numeric)]
+#   )
+#   
+#   rownames(numeric_mat) <- patient_df$organ
+#   
+#   # transpose: time × organs
+#   X <- t(numeric_mat)
+#   
+#   # covariance across organs
+#   S <- cov(X)
+#   
+#   # remove diagonal
+#   off_diag <- S[lower.tri(S)]
+#   
+#   mean(abs(off_diag))
+# }
+# 
+# names(rest_data_clean)
+# names(stress_data_clean)
+# 
+# # rest_data and stress_data are lists of 102 patient data frames
+# rest_metric   <- sapply(rest_data_clean, compute_patient_integration)
+# stress_metric <- sapply(stress_data_clean, compute_patient_integration)
+# 
+# delta_metric <- stress_metric - rest_metric
+# 
+# patient_metrics <- data.frame(
+#   study_code = names(rest_metric),
+#   rest_integration = rest_metric,
+#   stress_integration = stress_metric,
+#   delta_integration = delta_metric
+# )
+# 
+# analysis_df <- clinical_numeric %>%
+#   inner_join(patient_metrics, by = "study_code")
+# 
+# model <- lm(delta_integration ~ BMI, data = analysis_df)
+# summary(model)
+# 
+# 
+# t.test(analysis_df$stress_integration,
+#        analysis_df$rest_integration,
+#        paired = TRUE)
+# 
 
 
 
-graph_shape_summary <- function(adj_matrix) {
-  
-  g <- graph_from_adj(adj_matrix)
-  
-  list(
-    n_nodes = vcount(g),
-    n_edges = ecount(g),
-    density = edge_density(g),
-    n_components = components(g)$no,
-    diameter = diameter(g, directed = FALSE),
-    avg_clustering = transitivity(g, type = "average"),
-    max_clique_size = max(sapply(cliques(g), length))
-  )
-}
 
-graph_shape_summary(adj_matrix)
-
-
-centrality_summary <- function(adj_matrix) {
-  
-  g <- graph_from_adj(adj_matrix)
-  
-  data.frame(
-    organ = V(g)$name,
-    degree = degree(g),
-    betweenness = betweenness(g),
-    closeness = closeness(g)
-  )
-}
+######################### Examples ################
+# res_rest <- pairwise_metric_tests_full(
+#   rest_data_clean,
+#   B = 2
+# )
+# 
+# res_stress <- pairwise_metric_tests_full(
+#   stress_data_clean,
+#   B = 2
+# )
+# 
+# 
+# 
+# adj_rest   <- build_weighted_graph(res_rest, "effect")
+# adj_stress <- build_weighted_graph(res_stress, type="effect")
+# 
+# g_rest   <- graph_from_adjacency_matrix(adj_rest,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
+# 
+# g_stress <- graph_from_adjacency_matrix(adj_stress,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
 
 
-centrality_summary(adj_matrix)
+ischemia_ids <- clinical_data_clean %>%
+  filter(`ischemia/YES/NO` == "YES") %>%
+  pull(study_code)
 
-detect_communities <- function(adj_matrix) {
-  
-  g <- graph_from_adj(adj_matrix)
-  cluster_louvain(g)
-}
+# rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
+# rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
 
 
-detect_communities(adj_matrix)
+stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
+stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
+
+
+# res_rest_isch <- pairwise_metric_tests_full(rest_ischemia, B=2)
+# res_rest_no   <- pairwise_metric_tests_full(rest_noischemia, B=2)
+
+st_rest_isch <- pairwise_metric_tests_full(stress_ischemia, B=2)
+st_rest_no   <- pairwise_metric_tests_full(stress_noischemia, B=2)
+
+# adj_rest_isch  <- build_weighted_graph(res_rest_isch, "effect")
+# adj_rest_no <- build_weighted_graph(res_rest_no, "effect")
+
+adj_st_isch  <- build_weighted_graph(st_rest_isch, "effect")
+adj_st_no <- build_weighted_graph(st_rest_no, "effect")
+
+# g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
+
+# g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
+
+
+
+g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
+                                            mode="undirected",
+                                            weighted=TRUE,
+                                            diag=FALSE)
+
+g_st_no <- graph_from_adjacency_matrix(adj_st_no,
+                                         mode="undirected",
+                                         weighted=TRUE,
+                                         diag=FALSE)
+
+
+w_stisch <- E(g_st_isch)$weight
+
+# Normalize to [1, 10] range
+w_scaled_stisch <- 1 + 9 * (w_stisch - min(w_stisch)) / (max(w_stisch) - min(w_stisch))
+
+
+w_stno <- E(g_st_no)$weight
+
+# Normalize to [1, 10] range
+w_scaled_stno <- 1 + 9 * (w_stno - min(w_stno)) / (max(w_stno) - min(w_stno))
+
+
+
+
+# layout_fixed <- layout_with_fr(g_rest_isch)
+# plot(g_rest_isch, layout=layout_fixed)
+# 
+# layout_fixed <- layout_with_fr(g_rest_no)
+# plot(g_rest_no, layout=layout_fixed)
+
+
+
+layout_fixed <- layout_with_fr(g_st_isch)
+plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
+
+layout_fixed <- layout_with_fr(g_st_no)
+plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
