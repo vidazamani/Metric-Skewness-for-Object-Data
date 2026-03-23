@@ -102,7 +102,7 @@ metric_skew_fun <- function(matrices) {
   # Step 3: Compute average squared distance for inverted matrices
   avg_dist_inverted <- rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
   # avg_dist_inverted <- average_squared_distances_inverted(matrices)
-
+  
   
   # Step 4: Compute the final average squared distance
   final_avg_distance <- mean((avg_dist_original - avg_dist_inverted)^2)/mean(avg_dist_original^2)
@@ -340,60 +340,14 @@ all.equal(U2_cpp, U2_r)
 
 
 
-#### Variace 
-
-# s1_kernel <- function(j, k, l, D) {
-#   (D[j, k] * D[j, l] +
-#      D[k, l] * D[k, j] +
-#      D[l, j] * D[l, k]) / 3
-# }
-# 
-# s2_kernel <- function(j, k, l, D, G) {
-#   r_jkl <- (D[j, k] - G[j, k]) * (D[j, l] - G[j, l])
-#   r_klj <- (D[k, l] - G[k, l]) * (D[k, j] - G[k, j])
-#   r_ljk <- (D[l, j] - G[l, j]) * (D[l, k] - G[l, k])
-#   
-#   (r_jkl + r_klj + r_ljk) / 3
-# }
 
 
 
-############ s_hat_j #######################
 
-# s_hat_j <- function(j, D, G, p) {
-#   n <- nrow(D)
-#   if (n < 3) return(NA_real_)
-#   
-#   idx <- setdiff(seq_len(n), j)
-#   denom <- choose(n - 1, 2)
-#   total <- 0
-#   
-#   for (k in idx) {
-#     
-#     for (l in setdiff(seq(k, n), j)) {   # <-- L >= K
-#       
-#       if (p == 1) {
-#         total <- total + s1_kernel(j, k, l, D)
-#       } else if (p == 2) {
-#         total <- total + s2_kernel(j, k, l, D, G)
-#       }
-#     }
-#   }
-#   
-#   total / denom
-# }
+
 
 ################################################
 
-# s_hat_vector <- function(D, G, p) {
-#   n <- nrow(D)
-#   
-#   vapply(
-#     seq_len(n),
-#     function(j) s_hat_j(j, D, G, p),
-#     numeric(1)
-#   )
-# }
 
 
 vec0 <- function(S) {
@@ -439,18 +393,14 @@ cov_vec0_log <- function(mats) {
 
 
 imhof_cdf <- function(x, weights) {
-  res <- CompQuadForm::imhof(q = x, 
-                             lambda = weights,
+  res <- CompQuadForm::imhof(q = 1, 
+                             lambda = weights/x,
                              epsabs = 1e-15, 
                              epsrel = 1e-15)
   
   res$Qq
 }
 
-
-# res <- CompQuadForm::imhof(q = Tn, lambda = theta_sq)
-# res$Qq
-# res$abserr
 
 
 #################################################################
@@ -577,43 +527,31 @@ power_fixed_n <- function(
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 mu <- seq(0,0.06,0.01)
 dim <- 3
 sig <- 0.05
 nrep <- 1000
 B <- 500
-
+alpha <- 0.05
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, sig)
+res_n20  <- power_fixed_n(n = 20, dim, mu, sig, nrep  , B, alpha)
 end <- Sys.time()
 
 running_time <- end - start
 
 
 start <- Sys.time()
-res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, sig)
+res_n50 <- power_fixed_n(n = 50, dim, mu, sig, nrep  , B, alpha)
 end <- Sys.time()
 
 start <- Sys.time()
-res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, sig)
+res_n100 <- power_fixed_n(n = 100, dim, mu, sig, nrep  , B, alpha)
 end <- Sys.time()
 
 start <- Sys.time()
-res_n200 <- power_fixed_n(n = 200, dim, mu, sig, nrep  , B, sig)
+res_n200 <- power_fixed_n(n = 200, dim, mu, sig, nrep  , B, alpha)
 end <- Sys.time()
 
 running_time <- end - start
