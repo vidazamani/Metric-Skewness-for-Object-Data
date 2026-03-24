@@ -13,7 +13,9 @@ library(CompQuadForm)
 
 #####
 remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
+remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/mvdistmetricskew@V3')
 library(LogDis)
+library(mvdistmetricskew)
 # ## OR 
 # sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
 # sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/spd_distances.cpp")
@@ -21,6 +23,7 @@ library(LogDis)
 # devtools::install('/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis')
 # library(LogDis)
 #####
+#sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/mvdis.cpp")
 
 # --------------------------------------------------------
 # Function to compute h-hat(p) (Metric skewness)
@@ -270,6 +273,15 @@ distance_matrix_to_flip <- function(X) {
   Dflip
 }
 
+####### 
+
+a <- distance_matrix_mv(X)
+b <- distance_matrix_mv_cpp(X)
+
+c <- distance_matrix_to_flip(X)
+d <- distance_matrix_to_flip_cpp(X)
+
+all.equal(a,b)
 
 #### Kernels 
 
@@ -391,21 +403,24 @@ u2_statistic <- function(D, G) {
 
 #### example
 
-set.seed(1)
-n <- 100
-d <- 3
-
-X <- matrix(rnorm(n * d), n, d)
-
-
-D <- distance_matrix_mv(X)
-G <- distance_matrix_to_flip(X)
-
-
-U2_cpp <- u2_statistic_rcpp(D, G)
-U2_r   <- u2_statistic(D, G)
-
-all.equal(U2_cpp, U2_r)
+# set.seed(1)
+# n <- 100
+# d <- 3
+# 
+# X <- matrix(rnorm(n * d), n, d)
+# 
+# 
+# # D <- distance_matrix_mv(X)
+# # G <- distance_matrix_to_flip(X)
+# 
+# D <- distance_matrix_mv_cpp(X)
+# G <- distance_matrix_to_flip_cpp(X)
+# 
+# 
+# U2_cpp <- u2_statistic_rcpp(D, G)
+# U2_r   <- u2_statistic(D, G)
+# 
+# all.equal(U2_cpp, U2_r)
 
 
 
@@ -441,8 +456,8 @@ Asymp_metric_test <- function(X) {
     return(list(statistic = NA, p.value = NA))
   
   # 1) Distance matrices
-  D <- distance_matrix_mv(X)
-  G <- distance_matrix_to_flip(X)
+  D <- distance_matrix_mv_cpp(X)
+  G <- distance_matrix_to_flip_cpp(X)
   
   # 2) U2 statistic (C++ version)
   U2 <- u2_statistic_rcpp(D, G)
@@ -462,9 +477,9 @@ Asymp_metric_test <- function(X) {
   
   # 6) CDF via Imhof
   cdf_val <- imhof_cdf(Tn, theta_sq)
-
+  
   pval <-  cdf_val
-
+  
   
   ## OR two-sided p-value
   # pval <- 2 * min(cdf_val, 1 - cdf_val)
@@ -588,47 +603,95 @@ df_power <- bind_rows(df_n20, df_n200)
 
 ggplot(
   df_power,
-  aes(x = alpha_norm, y = Power, color = Test)
+  aes(x = alpha_norm,
+      y = Power,
+      color = Test,
+      group = Test)
 ) +
-  geom_line(linewidth = 1) +
+  
+  # 🔵 ALL SOLID LINES
+  geom_line(linewidth = 1.3) +
+  geom_point(size = 2.8) +
+  
+  # ⚫ reference line
   geom_hline(
     yintercept = 0.05,
     linetype = "dashed",
     color = "black",
-    linewidth = 0.7
-  )+
-  geom_point(size = 2) +
-  facet_wrap(~ n, labeller = label_both) +
+    linewidth = 0.9
+  ) +
+  
+  # 📊 SIDE-BY-SIDE
+  facet_wrap(
+    ~ n,
+    nrow = 1,
+    labeller = labeller(n = function(x) paste0("n = ", x))
+  ) +
+  
+  scale_color_manual(values = c(
+    "Mardia_asymp" = "#1f77b4",
+    "Mardia_perm"  = "#d95f02",
+    "Metric_asymp" = "#1b9e77",
+    "Metric_perm"  = "#cc79a7"
+  )) +
+  
   scale_y_continuous(limits = c(0, 1)) +
+  
   labs(
     x = expression("norm of "* alpha *" (Skewness magnitude)"),
-    y = "RP",
-    title = "Power Comparison under Azzalini Skew-Normal Data"
+    y = "Power",
+    color = "Test"
   ) +
-  theme_minimal(base_size = 13) +
+  theme_bw(base_size = 12) +
   theme(
     legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
+    panel.grid = element_blank(),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
   )
 
 
 
-
-
-
+# ggplot(
+#   df_power,
+#   aes(x = alpha_norm, y = Power, color = Test)
+# ) +
+#   geom_line(linewidth = 1) +
+#   geom_hline(
+#     yintercept = 0.05,
+#     linetype = "dashed",
+#     color = "black",
+#     linewidth = 0.7
+#   )+
+#   geom_point(size = 2) +
+#   facet_wrap(~ n, labeller = label_both) +
+#   scale_y_continuous(limits = c(0, 1)) +
+#   labs(
+#     x = expression("norm of "* alpha *" (Skewness magnitude)"),
+#     y = "RP",
+#     title = "Power Comparison under Azzalini Skew-Normal Data"
+#   ) +
+#   theme_minimal(base_size = 13) +
+#   theme(
+#     legend.position = "bottom",
+#     strip.text = element_text(face = "bold"),
+#     panel.grid.minor = element_blank()
+#   )
 
 ###################################################################################
 # --------------------------------------------------------
 # Parallel level test for different data generator
 # --------------------------------------------------------
 level_test_parallel <- function(gen_fun,
-                                      sample_sizes,
-                                      nrep,
-                                      B,
-                                      alpha,
-                                      p,
-                                      alpha_skew) {
+                                sample_sizes,
+                                nrep,
+                                B,
+                                alpha,
+                                p,
+                                alpha_skew) {
   
   # for reproducibility across forked processes
   RNGkind("L'Ecuyer-CMRG")
@@ -664,7 +727,7 @@ level_test_parallel <- function(gen_fun,
     # convert list → matrix
     pvals <- do.call(cbind, pvals_list)
     
-  
+    
     
     results_hhat[i]      <- mean(pvals[1, ] < alpha, na.rm = TRUE)
     results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
@@ -827,7 +890,6 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
 
 
 
