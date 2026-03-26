@@ -606,14 +606,15 @@ ggplot(
   aes(x = alpha_norm,
       y = Power,
       color = Test,
-      group = Test)
+      group = Test,
+      shape = Test)
 ) +
   
-  # 🔵 ALL SOLID LINES
+  # ALL SOLID LINES
   geom_line(linewidth = 1.3) +
   geom_point(size = 2.8) +
   
-  # ⚫ reference line
+  # reference line
   geom_hline(
     yintercept = 0.05,
     linetype = "dashed",
@@ -621,7 +622,7 @@ ggplot(
     linewidth = 0.9
   ) +
   
-  # 📊 SIDE-BY-SIDE
+  # SIDE-BY-SIDE
   facet_wrap(
     ~ n,
     nrow = 1,
@@ -629,14 +630,13 @@ ggplot(
   ) +
   
   scale_color_manual(values = c(
-    "Mardia_asymp" = "#1f77b4",
-    "Mardia_perm"  = "#d95f02",
-    "Metric_asymp" = "#1b9e77",
-    "Metric_perm"  = "#cc79a7"
+    "Mardia_asymp" = "#0072B2",
+    "Mardia_perm"  = "#D55E00",
+    "Metric_asymp" = "#009E73",
+    "Metric_perm"  = "#CC79A7"
   )) +
-  
+  scale_shape_manual(values = c(19, 17,18,15)) +
   scale_y_continuous(limits = c(0, 1)) +
-  
   labs(
     x = expression("norm of "* alpha *" (Skewness magnitude)"),
     y = "Power",
@@ -648,38 +648,12 @@ ggplot(
     legend.title = element_text(face = "bold"),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    panel.grid = element_blank(),
     axis.title = element_text(face = "bold"),
     axis.line = element_line(linewidth = 0.4)
   )
 
 
 
-# ggplot(
-#   df_power,
-#   aes(x = alpha_norm, y = Power, color = Test)
-# ) +
-#   geom_line(linewidth = 1) +
-#   geom_hline(
-#     yintercept = 0.05,
-#     linetype = "dashed",
-#     color = "black",
-#     linewidth = 0.7
-#   )+
-#   geom_point(size = 2) +
-#   facet_wrap(~ n, labeller = label_both) +
-#   scale_y_continuous(limits = c(0, 1)) +
-#   labs(
-#     x = expression("norm of "* alpha *" (Skewness magnitude)"),
-#     y = "RP",
-#     title = "Power Comparison under Azzalini Skew-Normal Data"
-#   ) +
-#   theme_minimal(base_size = 13) +
-#   theme(
-#     legend.position = "bottom",
-#     strip.text = element_text(face = "bold"),
-#     panel.grid.minor = element_blank()
-#   )
 
 ###################################################################################
 # --------------------------------------------------------
@@ -758,7 +732,7 @@ level_test_parallel <- function(gen_fun,
 
 
 
-set.seed(1)
+set.seed(2121)
 
 ## Parameters 
 sample_sizes <- seq(20,300,20)
