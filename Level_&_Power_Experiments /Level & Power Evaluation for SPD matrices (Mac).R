@@ -522,7 +522,7 @@ power_fixed_n <- function(
 #######
 
 
-sig_grid <- c(0.05, 0.1)
+sig_grid <- c(0.05, 0.3)
 n_values <- c(20, 50, 100, 200)
 mu <- seq(0,0.06,0.01)
 dim <- 3
