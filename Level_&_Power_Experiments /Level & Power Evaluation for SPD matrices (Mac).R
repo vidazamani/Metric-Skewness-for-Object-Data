@@ -519,13 +519,140 @@ power_fixed_n <- function(
   )
 }
 
+#######
+
+
+sig_grid <- c(0.05, 0.1)
+n_values <- c(20, 50, 100, 200)
+mu <- seq(0,0.06,0.01)
+dim <- 3
+nrep <- 1000
+B <- 500
+alpha <- 0.05
+
+run_power_all_sigma <- function(sig_grid, n_values){
+  
+  results_list <- list()
+  
+  for(sig in sig_grid){
+    
+    for(n in n_values){
+      
+      cat("Running for sigma =", sig, "n =", n, "\n")
+      
+      res <- power_fixed_n(n = n, dim, mu, sig, nrep, B, alpha)
+      
+      df <- res |>
+        pivot_longer(
+          cols = -mu,
+          names_to = "Test",
+          values_to = "Power"
+        ) |>
+        mutate(
+          n = n,
+          sigma = sig
+        )
+      
+      results_list[[paste(n, sig, sep = "_")]] <- df
+    }
+  }
+  
+  bind_rows(results_list)
+}
 
 
 
+df_power <- run_power_all_sigma(sig_grid, n_values)
+
+df_power$Test <- factor(df_power$Test,
+                        levels = c("Metric_perm", "Metric_asymp"),
+                        labels = c("Permutation", "Asymptotic"))
+
+df_power$n <- factor(df_power$n)
+df_power$sigma <- factor(df_power$sigma)
 
 
 
+ggplot(
+  df_power,
+  aes(x = mu,
+      y = Power,
+      color = sigma,
+      linetype = Test,
+      group = interaction(Test, sigma))
+) +
+  geom_line(linewidth = 0.8) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.6
+  ) +
+  facet_wrap(~ n, nrow = 2,
+             labeller = labeller(n = function(x) paste0("n = ", x)))+
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +  
+  scale_y_continuous(
+    limits = c(-0.05, 1),
+    breaks = seq(0, 1, 0.2),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  labs(x = expression(mu),
+               y = "Power",
+               color = expression(sigma),
+               linetype = "Test"
+             ) +
+  theme_bw(base_size = 14) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
+  )
 
+
+####### OR 
+
+ggplot(
+  df_power,
+  aes(x = mu,
+      y = Power,
+      color = Test,
+      linetype = Test,
+      group = Test)
+) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.8) +
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.6
+  ) +
+  facet_grid(sigma ~ n,
+             labeller = labeller(
+               n = function(x) paste0("n = ", x),
+               sigma = function(x) paste0("sigma = ", x)
+             )) +
+  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  scale_y_continuous(
+    limits = c(-0.03, 1),
+    breaks = seq(0, 1, 0.2)
+  ) +
+  labs(
+    x = expression(mu),
+    y = "Power",
+    color = "Test",
+    linetype = "Test"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold")
+  )
+
+############### OR 
 
 mu <- seq(0,0.06,0.01)
 dim <- 3
@@ -633,69 +760,13 @@ ggplot(
     legend.title = element_text(face = "bold"),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    panel.grid = element_blank(),
     axis.title = element_text(face = "bold"),
     axis.line = element_line(linewidth = 0.4)
   )
 
 
-ggplot(
-  df_power,
-  aes(x = mu, y = Power, color = Test)
-) +
-  geom_line(linewidth = 1) +
-  geom_hline(
-    yintercept = 0.05,
-    linetype = "dashed",
-    color = "black",
-    linewidth = 0.7
-  )+
-  geom_point(size = 2) +
-  facet_wrap(~ n, labeller = label_both) +
-  scale_y_continuous(limits = c(0, 1)) +
-  labs(
-    x = expression(mu),
-    y = "Power",
-    title = "Power Comparison under Cov matrices Data"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    legend.position = "bottom",
-    strip.text = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
 
 
-# p <- ggplot(df_power,
-#             aes(x = mu,
-#                 y = Power,
-#                 color = Test,
-#                 linetype = n,
-#                 group = interaction(Test, n))) +
-#   geom_line(linewidth = 1) +
-#   geom_hline(
-#     yintercept = 0.05,
-#     linetype = "dashed",
-#     color = "black",
-#     linewidth = 0.7
-#   )+
-#   geom_point(size = 2) +
-#   scale_y_continuous(limits = c(0, 1),
-#                      breaks = seq(0, 1, 0.2)) +
-#   labs(
-#     x = expression(mu),
-#     y = "Power",
-#     color = "Test",
-#     linetype = "Sample size (n)"
-#   ) +
-#   theme_minimal(base_size = 13) +
-#   theme(
-#     legend.position = "right",
-#     legend.title = element_text(face = "bold"),
-#     panel.grid.minor = element_blank()
-#   )
-# 
-# p
 
 ############# Level evaluation - Simulation across sample sizes to estimate level
 
