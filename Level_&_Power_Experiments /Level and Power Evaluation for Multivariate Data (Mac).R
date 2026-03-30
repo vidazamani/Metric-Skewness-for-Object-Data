@@ -810,23 +810,32 @@ df_all <- bind_rows(df_az, df_sdb)
 p_az <- ggplot(df_az,
                aes(x = n, y = Rejection,
                    color = Statistic, shape = Statistic)) +
-  geom_line(linewidth = 0.9, linetype = 'solid') +
+  geom_line(linewidth = 1.3, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
-             linetype = "dashed", color = "red") +
-  scale_color_manual(values = c("black", "blue",'green','purple')) +
+             linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("#0072B2", "#D55E00",'#009E73','#CC79A7')) +
   scale_shape_manual(values = c(19, 17,18,15)) +
   labs(
-    title = "Level Evaluation (Azzalini Data)",
+    title = "",
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
-  ) + 
-  ylim(0.02, 0.08) +
-  theme_minimal(base_size = 12) +
+  )  +
+  theme_bw(base_size = 12) +
   theme(
-    legend.position = "none",
-    panel.grid.minor = element_blank()
-  )
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
+  ) +
+  ylim(0.01,0.07)
+
+
+
+
+
 
 
 p_sdb <- ggplot(df_sdb,
