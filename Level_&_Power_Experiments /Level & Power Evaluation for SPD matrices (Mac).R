@@ -597,10 +597,10 @@ ggplot(
     expand = expansion(mult = c(0, 0.05))
   ) +
   labs(x = expression(mu),
-               y = "Power",
-               color = expression(sigma),
-               linetype = "Test"
-             ) +
+       y = "Power",
+       color = expression(sigma),
+       linetype = "Test"
+  ) +
   theme_bw(base_size = 14) +
   theme(
     legend.position = "bottom",
@@ -845,11 +845,11 @@ set.seed(111)
 
 dim  <- 3
 mu   <- 0
-sig  <- 0.5
+sig  <- 0.1
 alpha <- 0.05
 sample_sizes <- seq(10,300,20)
 
-nrep <- 1000     
+nrep <- 5000     
 B <- 500
 
 level_cov <- level_test_parallel(
@@ -880,26 +880,7 @@ df_spd <- tibble(
   pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
   mutate(Dataset = "Azzalini")
 
-p_spd <- ggplot(df_spd,
-                aes(x = n, y = Rejection,
-                    color = Statistic, shape = Statistic)) +
-  geom_line(linewidth = 0.9, linetype = 'solid') +
-  geom_point(size = 2.5) +
-  geom_hline(yintercept = 0.05,
-             linetype = "dashed", color = "black") +
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +
-  scale_shape_manual(values = c(19, 17)) +
-  labs(
-    title = "Level Evaluation (Cov Data)",
-    x = "Sample Size",
-    y = expression("Proportion of Rejection (p < " * alpha * ")")
-  ) + 
-  ylim(0, 0.1) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "bottom",
-    panel.grid.minor = element_blank()
-  )
+
 
 
 
@@ -911,7 +892,7 @@ ggplot(df_spd,
            color = Statistic,
            shape = Statistic,
            group = Statistic)) +
-  geom_line(linewidth = 0.8) +
+  geom_line(linewidth = 0.9) +
   geom_point(size = 2) +
   geom_hline(yintercept = 0.05,
              linetype = "dashed",
@@ -919,10 +900,6 @@ ggplot(df_spd,
              linewidth = 0.5) +
   scale_color_manual(values = c("#0072B2", "#D55E00")) +
   scale_shape_manual(values = c(16, 17)) +
-  scale_y_continuous(
-    breaks = seq(0, 0.1, 0.02),
-    expand = c(0, 0)
-  ) +
   coord_cartesian(ylim = c(0, 0.1)) +
   labs(
     x = "Sample size",
@@ -930,10 +907,14 @@ ggplot(df_spd,
     color = "Statistic",
     shape = "Statistic"
   ) +
-  theme_classic(base_size = 11) +
+  theme_bw(base_size = 12) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
     axis.title = element_text(face = "bold"),
     axis.line = element_line(linewidth = 0.4)
   )
+
+
