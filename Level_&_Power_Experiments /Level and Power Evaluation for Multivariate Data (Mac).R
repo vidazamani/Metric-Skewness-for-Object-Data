@@ -10,6 +10,7 @@ library(tidyr)
 library(mvnormalTest)
 library(Rcpp)
 library(CompQuadForm)
+library(RcppHungarian)
 
 #####
 remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
@@ -185,7 +186,7 @@ metric_skew(gen_sdb_sym(n,p,Lambda))
 
 
 # --------------------------------------------------------
-# Permutation test for h-hat(p) (Metric Skewness) = symmetry
+# Permutation test for h-hat(p) (Metric Skewness) 
 # --------------------------------------------------------
 perm_test_metric <- function(X, B) {
   
@@ -501,6 +502,54 @@ Asymp_metric_test(X)
 
 
 
+#################### Wasserstein-2 bootstrap-permutation test for skewness #########
+# Assumes that n is even
+#
+# D = squared distance matrix
+# G = squared distance matrix from original to flipped
+# R = number of bootstrap reps
+# B = number of premutation reps
+wasserstein_test <- function(X, R, B){
+  pval_vec <- rep(0, R)
+  
+  n <- nrow(D)
+  
+  # Distance matrices
+  D <- distance_matrix_mv_cpp(X)
+  G <- distance_matrix_to_flip_cpp(X)
+  
+  # Bootstrap replicates
+  for(i in 1:R){
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    G_corner <- G0[1:(n/2), (n/2 + 1):n]
+    
+    cost0 <- HungarianSolver(G_corner)$cost
+    
+    Dhn <- rbind(cbind(D0[1:(n/2), 1:(n/2)], G0[1:(n/2), (n/2 + 1):n]),
+                 cbind(t(G0[1:(n/2), (n/2 + 1):n]), D0[(n/2 + 1):n, (n/2 + 1):n]))
+    
+    perm_costs <- rep(0, B)
+    
+    # Permutation replicates
+    for(j in 1:B){
+      p_indices <- sample(1:n)
+      Dhn0 <- Dhn[p_indices, p_indices]
+      Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+      
+      perm_costs[j] <- HungarianSolver(Dhn0_corner)$cost
+    }
+    
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+
 
 
 ################################## Power Evaluation ########################
@@ -509,6 +558,7 @@ power_fixed_n <- function(
     n,
     alpha_grid,
     nrep,
+    R,
     B,
     alpha
 ) {
@@ -518,8 +568,8 @@ power_fixed_n <- function(
   xi <- rep(0, p)
   Omega <- diag(p)
   
-  power <- matrix(NA, nrow = length(alpha_grid), ncol = 4)
-  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp")
+  power <- matrix(NA, nrow = length(alpha_grid), ncol = 5)
+  colnames(power) <- c("Metric_perm", "Metric_asymp","Mardia_perm", "Mardia_asymp","Wasserstein")
   
   for (k in seq_along(alpha_grid)) {
     
@@ -537,7 +587,8 @@ power_fixed_n <- function(
         Metric_perm  = perm_test_metric(X, B),
         Metric_asymp = Asymp_metric_test(X)$p.value,
         Mardia_perm  = perm_test_mardia(X, B),
-        Mardia_asymp = asymp_pvalue_mardia(X)
+        Mardia_asymp = asymp_pvalue_mardia(X),
+        wasserstein  = wasserstein_test(X, R, B)
       )
       
     }, mc.cores = ncores)
@@ -572,9 +623,9 @@ alpha_grid <- list(
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , R = 500, B = 500, 0.05)
 
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , B = 500, 0.05)
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , R = 500, B = 500, 0.05)
 
 
 end <- Sys.time()
@@ -633,9 +684,16 @@ ggplot(
     "Mardia_asymp" = "#0072B2",
     "Mardia_perm"  = "#D55E00",
     "Metric_asymp" = "#009E73",
-    "Metric_perm"  = "#CC79A7"
+    "Metric_perm"  = "#CC79A7",
+    "Wasserstein" = "#E69F00"
   )) +
-  scale_shape_manual(values = c(19, 17,18,15)) +
+  scale_shape_manual(values = c(
+    "Mardia_asymp" = 19,
+    "Mardia_perm"  = 17,
+    "Metric_asymp" = 18,
+    "Metric_perm"  = 15,
+    "Wasserstein"  = 8
+  )) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
     x = expression("norm of "* alpha *" (Skewness magnitude)"),
@@ -662,6 +720,7 @@ ggplot(
 level_test_parallel <- function(gen_fun,
                                 sample_sizes,
                                 nrep,
+                                R,
                                 B,
                                 alpha,
                                 p,
@@ -677,6 +736,8 @@ level_test_parallel <- function(gen_fun,
   results_hhat_asym    <- numeric(length(sample_sizes))
   results_mardia       <- numeric(length(sample_sizes))
   results_mardia_asym  <- numeric(length(sample_sizes))
+  results_Wasserstein  <- numeric(length(sample_sizes))
+  
   
   for (i in seq_along(sample_sizes)) {
     
@@ -693,7 +754,8 @@ level_test_parallel <- function(gen_fun,
         metric_perm  = perm_test_metric(X, B),
         metric_asym  = Asymp_metric_test(X)$p.value,
         mardia_perm  = perm_test_mardia(X, B),
-        mardia_asym  = asymp_pvalue_mardia(X)
+        mardia_asym  = asymp_pvalue_mardia(X),
+        wasserstein  = wasserstein_test(X, R, B)
       )
       
     }, mc.cores = ncores)
@@ -707,13 +769,15 @@ level_test_parallel <- function(gen_fun,
     results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
     results_mardia[i]    <- mean(pvals[3, ] < alpha, na.rm = TRUE)
     results_mardia_asym[i] <- mean(pvals[4, ] < alpha, na.rm = TRUE)
+    results_Wasserstein[i] <- mean(pvals[5, ] < alpha, na.rm = TRUE)
     
     cat(
       "Done n =", n,
       "| metric perm:", round(results_hhat[i], 3),
       "| metric asym:", round(results_hhat_asym[i], 3),
       "| mardia perm:", round(results_mardia[i], 3),
-      "| mardia asym:", round(results_mardia_asym[i], 3), "\n"
+      "| mardia asym:", round(results_mardia_asym[i], 3),
+      "| Wasserstein:", round(results_Wasserstein[i], 3), "\n"
     )
   }
   
@@ -722,7 +786,8 @@ level_test_parallel <- function(gen_fun,
     metric_perm = results_hhat,
     metric_asym = results_hhat_asym,
     mardia_perm = results_mardia,
-    mardia_asym = results_mardia_asym
+    mardia_asym = results_mardia_asym,
+    Wasserstein = results_Wasserstein
   )
 }
 
@@ -737,6 +802,7 @@ set.seed(2121)
 ## Parameters 
 sample_sizes <- seq(20,300,20)
 nrep = 10000
+R = 500
 B = 500
 alpha = 0.05
 p = 3
@@ -758,6 +824,7 @@ res_sdb <- level_test_parallel(
   gen_fun = gen_sdb_sym,
   sample_sizes = sample_sizes,
   nrep,
+  R,
   B,
   alpha ,
   p,
@@ -769,6 +836,7 @@ res_az <- level_test_parallel(
   gen_fun = gen_azzalini,
   sample_sizes = sample_sizes,
   nrep,
+  R,
   B,
   alpha,
   p,
@@ -788,7 +856,8 @@ df_az <- tibble(
   Metric_perm = res_az$metric_perm,
   Metric_asym = res_az$metric_asym,
   Mardia_perm = res_az$mardia_perm,
-  Mardai_Asym = res_az$mardia_asym
+  Mardai_Asym = res_az$mardia_asym,
+  Wasserstein = res_az$Wasserstein
 ) |>
   pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
   mutate(Dataset = "Azzalini")
@@ -798,7 +867,8 @@ df_sdb <- tibble(
   Metric_perm = res_sdb$metric_perm,
   Metric_asym = res_sdb$metric_asym,
   Mardia_perm = res_sdb$mardia_perm,
-  Mardai_Asym = res_sdb$mardia_asym
+  Mardai_Asym = res_sdb$mardia_asym,
+  Wasserstein = res_sdb$Wasserstein
 ) |>
   pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
   mutate(Dataset = "SDB")
@@ -814,14 +884,14 @@ p_az <- ggplot(df_az,
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
              linetype = "dashed", color = "black") +
-  scale_color_manual(values = c("#0072B2", "#D55E00",'#009E73','#CC79A7')) +
-  scale_shape_manual(values = c(19, 17,18,15)) +
+  scale_color_manual(values = c("#0072B2", "#D55E00",'#009E73','#CC79A7',"#E69F00")) +
+  scale_shape_manual(values = c(19, 17,18,15, 8)) +
   labs(
     title = "",
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   )  +
-  theme_bw(base_size = 12) +
+  theme_bw(base_size = 16) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
@@ -834,6 +904,8 @@ p_az <- ggplot(df_az,
 
 
 
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Level Evaluation mv Data.pdf",
+       plot = p_az, width = 12, height = 7)
 
 
 
@@ -873,7 +945,6 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
 
 
 
