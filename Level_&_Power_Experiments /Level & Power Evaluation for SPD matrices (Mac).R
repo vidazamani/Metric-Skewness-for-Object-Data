@@ -9,6 +9,7 @@ library(parallel)
 library(purrr)
 library(Rcpp)
 library(CompQuadForm)
+library(RcppHungarian)
 
 #####
 remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
@@ -459,6 +460,57 @@ Asymp_metric_skewness_spd <- function(mats) {
 
 Asymp_metric_skewness_spd(mats)
 
+
+#################### Wasserstein-2 bootstrap-permutation test for skewness #########
+# Assumes that n is even
+#
+# D = squared distance matrix
+# G = squared distance matrix from original to flipped
+# R = number of bootstrap reps
+# B = number of premutation reps
+wasserstein_test <- function(mats, R, B){
+  pval_vec <- rep(0, R)
+  
+  n <- nrow(D)
+  
+  # Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  # Bootstrap replicates
+  for(i in 1:R){
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    G_corner <- G0[1:(n/2), (n/2 + 1):n]
+    
+    cost0 <- HungarianSolver(G_corner)$cost
+    
+    Dhn <- rbind(cbind(D0[1:(n/2), 1:(n/2)], G0[1:(n/2), (n/2 + 1):n]),
+                 cbind(t(G0[1:(n/2), (n/2 + 1):n]), D0[(n/2 + 1):n, (n/2 + 1):n]))
+    
+    perm_costs <- rep(0, B)
+    
+    # Permutation replicates
+    for(j in 1:B){
+      p_indices <- sample(1:n)
+      Dhn0 <- Dhn[p_indices, p_indices]
+      Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+      
+      perm_costs[j] <- HungarianSolver(Dhn0_corner)$cost
+    }
+    
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+
+
 ################################## Power Evaluation ########################
 
 ### Mac
@@ -469,6 +521,7 @@ power_fixed_n <- function(
     mu, 
     sig,
     nrep,
+    R,
     B,
     alpha
 ) {
@@ -478,8 +531,8 @@ power_fixed_n <- function(
   ncores = detectCores() - 1
   
   
-  power <- matrix(NA, nrow = length(mu), ncol = 2)
-  colnames(power) <- c("Metric_perm", "Metric_asymp")
+  power <- matrix(NA, nrow = length(mu), ncol = 3)
+  colnames(power) <- c("Metric_perm", "Metric_asymp","Wasserstein")
   
   for (k in seq_along(mu)) {
     
@@ -496,7 +549,8 @@ power_fixed_n <- function(
       
       c(
         Metric_perm  = Perm_test(mats, B,0)$p_value,
-        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
+        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value,
+        Wasserstein  = wasserstein_test(mats, R, B)
       )
       
     }, mc.cores = ncores)
@@ -522,11 +576,12 @@ power_fixed_n <- function(
 #######
 
 
-sig_grid <- c(0.05, 0.3)
+sig_grid <- c(0.05, 0.1, 0.3)
 n_values <- c(20, 50, 100, 200)
 mu <- seq(0,0.06,0.01)
 dim <- 3
 nrep <- 1000
+R <- 500
 B <- 500
 alpha <- 0.05
 
@@ -540,7 +595,7 @@ run_power_all_sigma <- function(sig_grid, n_values){
       
       cat("Running for sigma =", sig, "n =", n, "\n")
       
-      res <- power_fixed_n(n = n, dim, mu, sig, nrep, B, alpha)
+      res <- power_fixed_n(n , dim, mu, sig, nrep, R, B, alpha)
       
       df <- res |>
         pivot_longer(
@@ -565,12 +620,11 @@ run_power_all_sigma <- function(sig_grid, n_values){
 df_power <- run_power_all_sigma(sig_grid, n_values)
 
 df_power$Test <- factor(df_power$Test,
-                        levels = c("Metric_perm", "Metric_asymp"),
-                        labels = c("Permutation", "Asymptotic"))
+                        levels = c("Metric_perm", "Metric_asymp", "Wasserstein"),
+                        labels = c("Permutation", "Asymptotic", "Wasserstein"))
 
 df_power$n <- factor(df_power$n)
 df_power$sigma <- factor(df_power$sigma)
-
 
 
 ggplot(
@@ -590,7 +644,12 @@ ggplot(
   ) +
   facet_wrap(~ n, nrow = 2,
              labeller = labeller(n = function(x) paste0("n = ", x)))+
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +  
+  scale_color_manual(values = c("#0072B2", "#D55E00", "#009E73")) +
+  scale_linetype_manual(values = c(
+    "Permutation"  = "solid",
+    "Asymptotic"   = "dashed",
+    "Wasserstein"  = "dotdash"
+  )) +
   scale_y_continuous(
     limits = c(-0.05, 1),
     breaks = seq(0, 1, 0.2),
@@ -614,12 +673,12 @@ ggplot(
 
 ####### OR 
 
-ggplot(
+
+p <- ggplot(
   df_power,
   aes(x = mu,
       y = Power,
       color = Test,
-      linetype = Test,
       group = Test)
 ) +
   geom_line(linewidth = 0.9) +
@@ -633,9 +692,9 @@ ggplot(
   facet_grid(sigma ~ n,
              labeller = labeller(
                n = function(x) paste0("n = ", x),
-               sigma = function(x) paste0("sigma = ", x)
+               sigma = function(x) paste0("sigma = " , x)
              )) +
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +
+  scale_color_manual(values = c("#0072B2", "#D55E00","#E69F00")) +
   scale_y_continuous(
     limits = c(-0.03, 1),
     breaks = seq(0, 1, 0.2)
@@ -643,14 +702,21 @@ ggplot(
   labs(
     x = expression(mu),
     y = "Power",
-    color = "Test",
-    linetype = "Test"
+    color = "Test"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_size = 14) +
   theme(
     legend.position = "bottom",
-    strip.text = element_text(face = "bold")
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4)
   )
+
+
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Power Evaluation Cov Data.pdf",
+       plot = p, width = 12, height = 7)
 
 ############### OR 
 
@@ -719,8 +785,8 @@ df_n200 <- res_n200 |>
 df_power <- bind_rows(df_n20, df_n50, df_n100, df_n200)
 
 df_power$Test <- factor(df_power$Test,
-                        levels = c("Metric_perm", "Metric_asymp"),
-                        labels = c("Permutation", "Asymptotic"))
+                        levels = c("Metric_perm", "Metric_asymp", "wasserstein"),
+                        labels = c("Permutation", "Asymptotic", "Wasserstein"))
 
 df_power$n <- factor(df_power$n)
 
@@ -742,7 +808,7 @@ ggplot(
   ) +
   facet_wrap(~ n, nrow = 2,
              labeller = labeller(n = function(x) paste0("n = ", x))) +
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +  # colorblind-safe
+  scale_color_manual(values = c("#0072B2", "#D55E00","#009E73")) +  # colorblind-safe
   scale_y_continuous(
     limits = c(-0.03, 1),
     breaks = seq(0, 1, 0.2),
@@ -775,7 +841,8 @@ level_test_parallel <- function(sample_sizes,
                                 dim, 
                                 mu, 
                                 sig,
-                                nrep, 
+                                nrep,
+                                R,
                                 B, 
                                 alpha) {
   
@@ -789,7 +856,7 @@ level_test_parallel <- function(sample_sizes,
   
   results_hhat         <- numeric(length(sample_sizes))
   results_hhat_asym    <- numeric(length(sample_sizes))
-  
+  results_Wasserstein  <- numeric(length(sample_sizes))
   
   
   
@@ -807,7 +874,8 @@ level_test_parallel <- function(sample_sizes,
       
       c(
         Metric_perm  = Perm_test(mats, B,0)$p_value,
-        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value
+        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value,
+        Wasserstein  = wasserstein_test(mats, R, B)
       )
       
     }, mc.cores = ncores)
@@ -820,12 +888,13 @@ level_test_parallel <- function(sample_sizes,
     
     results_hhat[i]      <- mean(pvals[1, ] < alpha, na.rm = TRUE)
     results_hhat_asym[i] <- mean(pvals[2, ] < alpha, na.rm = TRUE)
-    
+    results_Wasserstein[i] <- mean(pvals[3, ] < alpha, na.rm = TRUE)
     
     cat(
       "Done n =", n,
       "| metric perm:", round(results_hhat[i], 3),
-      "| metric asym:", round(results_hhat_asym[i], 3),"\n")
+      "| metric asym:", round(results_hhat_asym[i], 3),
+      "| Wasserstein:", round(results_Wasserstein[i], 3), "\n")
     
   }
   
@@ -833,7 +902,8 @@ level_test_parallel <- function(sample_sizes,
   
   list(sample_sizes = sample_sizes,
        metric_perm = results_hhat,
-       metric_asym = results_hhat_asym)
+       metric_asym = results_hhat_asym,
+       Wasserstein = results_Wasserstein)
 }
 
 
@@ -849,17 +919,19 @@ sig  <- 0.1
 alpha <- 0.05
 sample_sizes <- seq(10,300,20)
 
-nrep <- 5000     
+nrep <- 5000  
+R <- 500
 B <- 500
 
 level_cov <- level_test_parallel(
-  sample_sizes = sample_sizes,
-  dim = dim,
-  mu = mu, 
-  sig = sig,
-  nrep = nrep,
-  B = B,
-  alpha = alpha 
+  sample_sizes,
+  dim,
+  mu, 
+  sig,
+  nrep,
+  R,
+  B,
+  alpha
 )
 
 
@@ -875,10 +947,10 @@ level_cov <- level_test_parallel(
 df_spd <- tibble(
   n = level_cov$sample_sizes,
   Metric_perm = level_cov$metric_perm,
-  Metric_asym = level_cov$metric_asym
+  Metric_asym = level_cov$metric_asym,
+  Wasserstein = level_cov$Wasserstein
 ) |>
-  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
-  mutate(Dataset = "Azzalini")
+  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") 
 
 
 
@@ -898,8 +970,8 @@ ggplot(df_spd,
              linetype = "dashed",
              color = "black",
              linewidth = 0.5) +
-  scale_color_manual(values = c("#0072B2", "#D55E00")) +
-  scale_shape_manual(values = c(16, 17)) +
+  scale_color_manual(values = c("#009E73", "#CC79A7","#E69F00")) +
+  scale_shape_manual(values = c(18, 15, 8)) +
   coord_cartesian(ylim = c(0, 0.1)) +
   labs(
     x = "Sample size",
@@ -916,5 +988,4 @@ ggplot(df_spd,
     axis.title = element_text(face = "bold"),
     axis.line = element_line(linewidth = 0.4)
   )
-
 
