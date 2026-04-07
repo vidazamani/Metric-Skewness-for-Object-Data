@@ -880,7 +880,7 @@ df_all <- bind_rows(df_az, df_sdb)
 p_az <- ggplot(df_az,
                aes(x = n, y = Rejection,
                    color = Statistic, shape = Statistic)) +
-  geom_line(linewidth = 1.3, linetype = 'solid') +
+  geom_line(linewidth = 1.5, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
              linetype = "dashed", color = "black") +
@@ -891,21 +891,22 @@ p_az <- ggplot(df_az,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   )  +
-  theme_bw(base_size = 16) +
+  theme_bw(base_size = 15) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 15),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
     axis.title = element_text(face = "bold"),
-    axis.line = element_line(linewidth = 0.4)
+    axis.line = element_line(linewidth = 0.5)
   ) +
   ylim(0.01,0.07)
 
 
 
-ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Level Evaluation mv Data.pdf",
-       plot = p_az, width = 12, height = 7)
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Level Evaluation mv Data 2.pdf",
+       plot = p_az, width = 10, height = 7)
 
 
 
@@ -945,7 +946,6 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
 
 
 
