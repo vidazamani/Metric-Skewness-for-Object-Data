@@ -911,7 +911,7 @@ level_test_parallel <- function(sample_sizes,
 
 
 
-set.seed(111)
+set.seed(1111)
 
 dim  <- 3
 mu   <- 0
@@ -919,7 +919,7 @@ sig  <- 0.1
 alpha <- 0.05
 sample_sizes <- seq(10,300,20)
 
-nrep <- 5000  
+nrep <- 5000
 R <- 500
 B <- 500
 
@@ -958,13 +958,13 @@ df_spd <- tibble(
 
 df_spd$Statistic <- factor(df_spd$Statistic)
 
-ggplot(df_spd,
+p2 <- ggplot(df_spd,
        aes(x = n,
            y = Rejection,
            color = Statistic,
            shape = Statistic,
            group = Statistic)) +
-  geom_line(linewidth = 0.9) +
+  geom_line(linewidth = 1.5) +
   geom_point(size = 2) +
   geom_hline(yintercept = 0.05,
              linetype = "dashed",
@@ -979,13 +979,17 @@ ggplot(df_spd,
     color = "Statistic",
     shape = "Statistic"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_size = 15) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 15),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
     axis.title = element_text(face = "bold"),
-    axis.line = element_line(linewidth = 0.4)
+    axis.line = element_line(linewidth = 0.5)
   )
 
+
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/Level Evaluation Cov Data 2.pdf",
+       plot = p2, width = 10, height = 7)
