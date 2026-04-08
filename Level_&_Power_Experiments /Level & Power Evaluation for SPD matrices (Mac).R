@@ -471,7 +471,7 @@ Asymp_metric_skewness_spd(mats)
 wasserstein_test <- function(mats, R, B){
   pval_vec <- rep(0, R)
   
-  n <- nrow(D)
+  n <- dim(mats)[3]
   
   # Distance matrices
   D <- distance_logeuclid_cpp(mats)
