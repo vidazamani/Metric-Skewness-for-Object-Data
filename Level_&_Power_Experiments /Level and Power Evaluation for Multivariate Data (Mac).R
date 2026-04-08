@@ -512,7 +512,7 @@ Asymp_metric_test(X)
 wasserstein_test <- function(X, R, B){
   pval_vec <- rep(0, R)
   
-  n <- nrow(D)
+  n <- nrow(X)
   
   # Distance matrices
   D <- distance_matrix_mv_cpp(X)
@@ -946,7 +946,6 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
 
 
 
