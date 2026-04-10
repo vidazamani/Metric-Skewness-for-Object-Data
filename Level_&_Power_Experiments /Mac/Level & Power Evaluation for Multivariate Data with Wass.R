@@ -664,7 +664,7 @@ start <- Sys.time()
 
 res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 100 , R = 50, B = 50, 0.05)
 
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 100 , R = 50, B = 50, 0.05)
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 10 , R = 50, B = 50, 0.05)
 
 
 end <- Sys.time()
@@ -689,6 +689,19 @@ df_n200 <- res_n200 |>
 
 df_power <- bind_rows(df_n20, df_n200)
 
+df_power$Test <- factor(df_power$Test,
+                           levels = c("Metric_perm", 
+                                      "Metric_asymp",
+                                      "Mardia_perm",
+                                      "Mardia_asymp",
+                                      "Wasserstein1", 
+                                      "Wasserstein2"),
+                           labels = c("Metric (Perm)", 
+                                      "Metric (Asymp)",
+                                      "Mardia (Perm)",
+                                      "Mardia (Asymp)",
+                                      "Wass (Boot+Perm)",
+                                      "Wass (Perm)"))
 
 
 ggplot(
@@ -720,20 +733,21 @@ ggplot(
   ) +
   
   scale_color_manual(values = c(
-    "Mardia_asymp" = "#0072B2",
-    "Mardia_perm"  = "#D55E00",
-    "Metric_asymp" = "#009E73",
-    "Metric_perm"  = "#CC79A7",
-    "Wasserstein1" = "#E69F00",
-    "Wasserstein2" = "#56B4E9"
+    "Mardia (Asymp)" = "#0072B2",
+    "Mardia (Perm)"  = "#D55E00",
+    "Metric (Asymp)" = "#009E73",
+    "Metric (Perm)"  = "#CC79A7",
+    "Wass (Boot+Perm)" = "#E69F00",
+    "Wass (Perm)" = "#56B4E9"
   )) +
   scale_shape_manual(values = c(
-    "Mardia_asymp" = 19,
-    "Mardia_perm"  = 17,
-    "Metric_asymp" = 18,
-    "Metric_perm"  = 15,
-    "Wasserstein1"  = 8,
-    "Wasserstein2"  = 8
+    "Mardia (Asymp)" = 19,
+    "Mardia (Perm)"  = 17,
+    "Metric (Asymp)" = 18,
+    "Metric (Perm)"  = 15,
+    "Wass (Boot+Perm)"  = 8,
+    "Wass (Perm)"  = 22
+    
   )) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
@@ -846,7 +860,7 @@ set.seed(2121)
 
 ## Parameters 
 sample_sizes <- seq(20,300,20)
-nrep = 100
+nrep = 10
 R = 50
 B = 50
 alpha = 0.05
@@ -901,12 +915,28 @@ df_az <- tibble(
   Metric_perm = res_az$metric_perm,
   Metric_asym = res_az$metric_asym,
   Mardia_perm = res_az$mardia_perm,
-  Mardia_Asym = res_az$mardia_asym,
+  Mardia_asym = res_az$mardia_asym,
   Wasserstein1 = res_az$Wasserstein1,
   Wasserstein2 = res_az$Wasserstein2
 ) |>
   pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
   mutate(Dataset = "Azzalini")
+
+
+df_az$Statistic <- factor(df_az$Statistic,
+                        levels = c("Metric_perm", 
+                                   "Metric_asym",
+                                   "Mardia_perm",
+                                   "Mardia_asym",
+                                   "Wasserstein1", 
+                                   "Wasserstein2"),
+                        labels = c("Metric (Perm)", 
+                                   "Metric (Asymp)",
+                                   "Mardia (Perm)",
+                                   "Mardia (Asymp)",
+                                   "Wass (Boot+Perm)",
+                                   "Wass (Perm)"))
+
 
 df_sdb <- tibble(
   n = res_sdb$sample_sizes,
@@ -932,7 +962,7 @@ p_az <- ggplot(df_az,
   geom_hline(yintercept = 0.05,
              linetype = "dashed", color = "black") +
   scale_color_manual(values = c("#0072B2", "#D55E00",'#009E73','#CC79A7',"#E69F00", "#56B4E9")) +
-  scale_shape_manual(values = c(19, 17,18,15, 8, 8)) +
+  scale_shape_manual(values = c(19, 17,18,15, 8, 22)) +
   labs(
     title = "",
     x = "Sample Size",
@@ -948,7 +978,7 @@ p_az <- ggplot(df_az,
     axis.title = element_text(face = "bold"),
     axis.line = element_line(linewidth = 0.5)
   ) +
-  ylim(0.01,0.07)
+  ylim(0.0,0.9)
 
 
 
@@ -993,6 +1023,5 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
 
 
