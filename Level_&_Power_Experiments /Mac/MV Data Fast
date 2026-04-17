@@ -709,7 +709,7 @@ df_power$Test <- factor(df_power$Test,
                                    "Wass (Perm)"))
 
 
-ggplot(
+Power_plot <- ggplot(
   df_power,
   aes(x = alpha_norm,
       y = Power,
@@ -756,21 +756,23 @@ ggplot(
   )) +
   scale_y_continuous(limits = c(0, 1)) +
   labs(
-    x = expression("norm of "* alpha *" (Skewness magnitude)"),
+    x = expression("Norm of "* alpha *" (Skewness magnitude)"),
     y = "Power",
     color = "Test"
   ) +
-  theme_bw(base_size = 12) +
+  theme_bw(base_size = 16) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
-    axis.line = element_line(linewidth = 0.4)
+    axis.title = element_text(face = "plain"),
+    axis.line = element_line(linewidth = 0.5)
   )
 
 
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multivariate Skewness/Power Evaluation mv Data.pdf",
+       plot = Power_plot, width = 10, height = 7)
 
 
 ###################################################################################
