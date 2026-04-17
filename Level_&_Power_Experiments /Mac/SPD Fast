@@ -701,7 +701,7 @@ p <- ggplot(
     legend.title = element_text(face = "bold"),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
+    axis.title = element_text(face = "plain"),
     axis.line = element_line(linewidth = 0.5)
   )
 
