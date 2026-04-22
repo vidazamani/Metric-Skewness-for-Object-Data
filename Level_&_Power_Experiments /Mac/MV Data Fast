@@ -867,9 +867,9 @@ set.seed(2121)
 
 ## Parameters 
 sample_sizes <- seq(20,300,20)
-nrep = 10
+nrep = 5000
 R = 50
-B = 50
+B = 500
 alpha = 0.05
 p = 3
 
@@ -885,6 +885,17 @@ p = 3
 
 start <- Sys.time()
 
+res_az <- level_test_parallel(
+  gen_fun = gen_azzalini,
+  sample_sizes = sample_sizes,
+  nrep,
+  R,
+  B,
+  alpha,
+  p,
+  alpha_skew = c(rep(0,p))
+)
+
 
 res_sdb <- level_test_parallel(
   gen_fun = gen_sdb_sym,
@@ -897,17 +908,6 @@ res_sdb <- level_test_parallel(
   alpha_skew = matrix(0, nrow = p, ncol = 2)
 )
 
-
-res_az <- level_test_parallel(
-  gen_fun = gen_azzalini,
-  sample_sizes = sample_sizes,
-  nrep,
-  R,
-  B,
-  alpha,
-  p,
-  alpha_skew = c(rep(0,p))
-)
 
 
 end <- Sys.time()
@@ -926,11 +926,11 @@ df_az <- tibble(
   Wasserstein1 = res_az$Wasserstein1,
   Wasserstein2 = res_az$Wasserstein2
 ) |>
-  pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") |>
+  pivot_longer(-n, names_to = "Test", values_to = "Rejection") |>
   mutate(Dataset = "Azzalini")
 
 
-df_az$Statistic <- factor(df_az$Statistic,
+df_az$Test <- factor(df_az$Test,
                           levels = c("Metric_perm", 
                                      "Metric_asym",
                                      "Mardia_perm",
@@ -963,7 +963,7 @@ df_all <- bind_rows(df_az, df_sdb)
 
 p_az <- ggplot(df_az,
                aes(x = n, y = Rejection,
-                   color = Statistic, shape = Statistic)) +
+                   color = Test, shape = Test)) +
   geom_line(linewidth = 1.5, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
@@ -975,21 +975,21 @@ p_az <- ggplot(df_az,
     x = "Sample Size",
     y = expression("Proportion of Rejection (p < " * alpha * ")")
   )  +
-  theme_bw(base_size = 15) +
+  theme_bw(base_size = 16) +
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
     legend.text = element_text(size = 15),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
-    axis.title = element_text(face = "bold"),
+    axis.title = element_text(face = "plain"),
     axis.line = element_line(linewidth = 0.5)
   ) +
-  ylim(0.0,0.9)
+  ylim(0.0,0.08)
 
 
 
-ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Level Evaluation mv Data 2.pdf",
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multivariate Skewness/Level Evaluation mv Data 2.pdf",
        plot = p_az, width = 10, height = 7)
 
 
