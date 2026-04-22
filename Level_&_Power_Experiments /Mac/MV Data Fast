@@ -964,7 +964,7 @@ df_all <- bind_rows(df_az, df_sdb)
 p_az <- ggplot(df_az,
                aes(x = n, y = Rejection,
                    color = Test, shape = Test)) +
-  geom_line(linewidth = 1.5, linetype = 'solid') +
+  geom_line(linewidth = 1.3, linetype = 'solid') +
   geom_point(size = 2.5) +
   geom_hline(yintercept = 0.05,
              linetype = "dashed", color = "black") +
@@ -979,7 +979,7 @@ p_az <- ggplot(df_az,
   theme(
     legend.position = "bottom",
     legend.title = element_text(face = "bold"),
-    legend.text = element_text(size = 15),
+    legend.text = element_text(size = 14),
     strip.background = element_rect(fill = "white"),
     strip.text = element_text(face = "bold"),
     axis.title = element_text(face = "plain"),
