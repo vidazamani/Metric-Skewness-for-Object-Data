@@ -973,7 +973,7 @@ p_az <- ggplot(df_az,
   labs(
     title = "",
     x = "Sample Size",
-    y = expression("Proportion of Rejection (p < " * alpha * ")")
+    y = expression("Rejection Proportion (p < " * alpha * ")")
   )  +
   theme_bw(base_size = 16) +
   theme(
