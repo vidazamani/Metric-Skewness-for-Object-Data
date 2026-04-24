@@ -843,7 +843,7 @@ ggplot(
   
   
   
-  set.seed(1111)
+set.seed(1111)
   
   dim  <- 3
   mu   <- 0
@@ -851,9 +851,9 @@ ggplot(
   alpha <- 0.05
   sample_sizes <- seq(10,300,20)
   
-  nrep <- 10
+  nrep <- 1000
   R <- 50
-  B <- 50
+  B <- 500
   
   level_cov <- level_test_parallel(
     sample_sizes,
@@ -897,18 +897,18 @@ ggplot(
                    color = Statistic,
                    shape = Statistic,
                    group = Statistic)) +
-    geom_line(linewidth = 1.5) +
+    geom_line(linewidth = 1.3) +
     geom_point(size = 2) +
     geom_hline(yintercept = 0.05,
                linetype = "dashed",
                color = "black",
                linewidth = 0.5) +
-    scale_color_manual(values = c("#009E73", "#CC79A7","#E69F00","#56B4E9")) +
+    scale_color_manual(values = c("#0072B2", "#D55E00","#E69F00","#56B4E9")) +
     scale_shape_manual(values = c(18, 15, 8, 16)) +
     coord_cartesian(ylim = c(0, 0.15)) +
     labs(
       x = "Sample size",
-      y = expression("Rejection proportion  (" * alpha == 0.05 * ")"),
+      y = expression("Rejection proportion  (p < " * alpha * ")"),
       color = "Statistic",
       shape = "Statistic"
     ) +
@@ -919,7 +919,7 @@ ggplot(
       legend.text = element_text(size = 15),
       strip.background = element_rect(fill = "white"),
       strip.text = element_text(face = "bold"),
-      axis.title = element_text(face = "bold"),
+      axis.title = element_text(face = "plain"),
       axis.line = element_line(linewidth = 0.5)
     )
   
