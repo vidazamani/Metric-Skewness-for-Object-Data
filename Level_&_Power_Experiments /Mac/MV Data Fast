@@ -738,10 +738,10 @@ Power_plot <- ggplot(
   ) +
   
   scale_color_manual(values = c(
-    "Mardia (Asymp)" = "#0072B2",
-    "Mardia (Perm)"  = "#D55E00",
-    "Metric (Asymp)" = "#009E73",
-    "Metric (Perm)"  = "#CC79A7",
+    "Mardia (Asymp)" = "#CC79A7",
+    "Mardia (Perm)"  = "#009E73",
+    "Metric (Asymp)" = "#D55E00",
+    "Metric (Perm)"  = "#0072B2",
     "Wass (Boot+Perm)" = "#E69F00",
     "Wass (Perm)" = "#56B4E9"
   )) +
@@ -931,18 +931,18 @@ df_az <- tibble(
 
 
 df_az$Test <- factor(df_az$Test,
-                          levels = c("Metric_perm", 
-                                     "Metric_asym",
-                                     "Mardia_perm",
-                                     "Mardia_asym",
-                                     "Wasserstein1", 
-                                     "Wasserstein2"),
-                          labels = c("Metric (Perm)", 
-                                     "Metric (Asymp)",
-                                     "Mardia (Perm)",
-                                     "Mardia (Asymp)",
-                                     "Wass (Boot+Perm)",
-                                     "Wass (Perm)"))
+                     levels = c("Metric_perm", 
+                                "Metric_asym",
+                                "Mardia_perm",
+                                "Mardia_asym",
+                                "Wasserstein1", 
+                                "Wasserstein2"),
+                     labels = c("Metric (Perm)", 
+                                "Metric (Asymp)",
+                                "Mardia (Perm)",
+                                "Mardia (Asymp)",
+                                "Wass (Boot+Perm)",
+                                "Wass (Perm)"))
 
 
 df_sdb <- tibble(
@@ -1030,4 +1030,3 @@ p_sdb <- ggplot(df_sdb,
     plot.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
-
