@@ -881,22 +881,22 @@ set.seed(1111)
     Wasserstein1 = level_cov$Wasserstein1,
     Wasserstein2 = level_cov$Wasserstein2
   ) |>
-    pivot_longer(-n, names_to = "Statistic", values_to = "Rejection") 
+    pivot_longer(-n, names_to = "Test", values_to = "Rejection") 
   
   
   
   
   
-  df_spd$Statistic <- factor(df_spd$Statistic,
+  df_spd$Test <- factor(df_spd$Test,
                              levels = c("Metric_perm", "Metric_asym", "Wasserstein1", "Wasserstein2"),
                              labels = c("Metric (Perm)", "Metric (Asymp)", "Wass (Boot+Perm)", "Wass (Perm)"))
   
   p2 <- ggplot(df_spd,
                aes(x = n,
                    y = Rejection,
-                   color = Statistic,
-                   shape = Statistic,
-                   group = Statistic)) +
+                   color = Test,
+                   shape = Test,
+                   group = Test)) +
     geom_line(linewidth = 1.3) +
     geom_point(size = 2) +
     geom_hline(yintercept = 0.05,
@@ -905,12 +905,12 @@ set.seed(1111)
                linewidth = 0.5) +
     scale_color_manual(values = c("#0072B2", "#D55E00","#E69F00","#56B4E9")) +
     scale_shape_manual(values = c(18, 15, 8, 16)) +
-    coord_cartesian(ylim = c(0, 0.15)) +
+    coord_cartesian(ylim = c(0, 0.08)) +
     labs(
       x = "Sample size",
       y = expression("Rejection proportion  (p < " * alpha * ")"),
-      color = "Statistic",
-      shape = "Statistic"
+      color = "Test",
+      shape = "Test"
     ) +
     theme_bw(base_size = 15) +
     theme(
