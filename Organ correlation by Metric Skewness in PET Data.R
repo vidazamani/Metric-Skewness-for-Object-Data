@@ -10,9 +10,12 @@ library(parallel)
 library(shapes)
 library(readxl)
 library(dplyr)
+library(patchwork)
+library(ggraph)
+
 
 #####
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
+#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
 library(LogDis)
 
 
@@ -106,6 +109,18 @@ Perm_test <- function(matrices, iter, seed){
 ### There are 102 patients all together 
 
 setwd('/Users/vizama/Documents/Papers/2nd paper/Dataset/PET data')
+clinical_data <- read_excel("/Users/vizama/Documents/Papers/2nd paper/Dataset/excel_aboutKoveriData.xlsx")
+
+
+
+clinical_data <- clinical_data %>%
+  mutate(across(everything(),
+                ~na_if(., "NA"))) %>%
+  mutate(across(everything(),
+                ~na_if(., "")))
+# Remove rows with ANY NA
+clinical_data_clean <- clinical_data %>%
+  filter(complete.cases(.)) %>% filter(study_code != "koveri0081")
 
 
 # vector of organ names
@@ -131,16 +146,33 @@ rest_files   <- grep("rest", all_files, value = TRUE)
 stress_files <- grep("stress", all_files, value = TRUE)
 
 
+# Extract patient IDs from filenames
+rest_ids <- sub("_rest_15tacs.csv", "", rest_files)
+stress_ids <- sub("_stress_15tacs.csv", "", stress_files)
+
+
+
 
 ######################################################################
 #### In this part, a data frame per each patient is created 
-
 
 rest_data   <- lapply(rest_files, read_with_organs)
 stress_data <- lapply(stress_files, read_with_organs)
 
 
-get_pair_covariances <- function(data_list, organA, organB) {
+names(rest_data)   <- rest_ids
+names(stress_data) <- stress_ids
+
+
+valid_ids <- clinical_data_clean$study_code
+
+rest_data_clean <- rest_data[names(rest_data) %in% valid_ids]
+stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
+
+
+############## correlation between two different organs ######################
+
+get_pair_corr <- function(data_list, organA, organB) {
   
   n_patients <- length(data_list)
   S_array <- array(0, dim = c(2, 2, n_patients))
@@ -158,12 +190,12 @@ get_pair_covariances <- function(data_list, organA, organB) {
     
     # Check organs exist
     if (!all(c(organA, organB) %in% rownames(numeric_mat))) {
-      stop("Organ name not found in patient ", i)
+      stop("Organ name not found in patient", i)
     }
     
     Xi <- t(numeric_mat[c(organA, organB), ])
     
-    S <- cov(Xi)
+    S <- cor(Xi, method = "kendall")
     S <- S + 1e-6 * diag(2)
     #S_array[, , i] <- cov(Xi)
     S_array[, , i] <- S
@@ -173,10 +205,12 @@ get_pair_covariances <- function(data_list, organA, organB) {
 }
 
 
-get_pair_covariances(rest_data,'heart' ,'spleen')
-get_pair_covariances(stress_data,'heart' ,'spleen')
+get_pair_corr(rest_data_clean,'heart' ,'spleen')
+get_pair_corr(stress_data_clean,'heart' ,'spleen')
 
 
+
+# hist(get_pair_corr(rest_data,'RLL' ,'RML')[1,2,], breaks = 10)
 
 get_organ_names <- function(data_list) {
   patient_df <- data_list[[1]]
@@ -184,157 +218,51 @@ get_organ_names <- function(data_list) {
 }
 
 
+# ############# Graph ########
+# 
+# 
+# build_graph_from_pvalues <- function(results, alpha = 0.05) {
+#   
+#   organs <- unique(c(results$organA, results$organB))
+#   p <- length(organs)
+#   
+#   adj <- matrix(0, p, p)
+#   rownames(adj) <- colnames(adj) <- organs
+#   
+#   for (i in seq_len(nrow(results))) {
+#     
+#     if (results$p_value[i] < alpha) {
+#       
+#       A <- results$organA[i]
+#       B <- results$organB[i]
+#       
+#       adj[A, B] <- 1
+#       adj[B, A] <- 1
+#     }
+#   }
+#   
+#   adj
+# }
+# 
+# 
+# graph_from_adj <- function(adj_matrix) {
+#   graph_from_adjacency_matrix(adj_matrix,
+#                               mode = "undirected",
+#                               diag = FALSE)
+# }
+# 
+# plot_organ_graph <- function(adj_matrix) {
+#   
+#   g <- graph_from_adj(adj_matrix)
+#   
+#   plot(g,
+#        layout = layout_with_fr(g), # Fruchterman-Reingold layout # or layout_in_circle(g)   
+#        vertex.size = 30,
+#        vertex.label.cex = 0.8,
+#        edge.width = 2)
+# }
 
 
-  
-
-
-pairwise_metric_tests_parallel <- function(
-    data_list,
-    organs = NULL,
-    n_organs = NULL,
-    B,
-    alpha = 0.05,
-    seed = 1818
-) {
-  
-
-  ncores <- detectCores() - 1
-  
-  all_organs <- get_organ_names(data_list)
-  
-  # ----- Organ selection logic -----
-  
-  if (!is.null(organs)) {
-    
-    # Scenario 1: user provided organ vector
-    if (!all(organs %in% all_organs)) {
-      stop("Some selected organs not found in dataset.")
-    }
-    
-  } else if (!is.null(n_organs)) {
-    
-    # Scenario 2: randomly sample organs
-    set.seed(seed)
-    organs <- sample(all_organs, n_organs)
-    
-  } else {
-    
-    # Scenario 3: use all organs
-    organs <- all_organs
-    
-  }
-  
-  # ----------------------------------
-  
-  pairs <- combn(organs, 2, simplify = FALSE)
-  
-  results_list <- mclapply(seq_along(pairs), function(k) {
-    
-    organA <- pairs[[k]][1]
-    organB <- pairs[[k]][2]
-    
-    S_array <- get_pair_covariances(data_list, organA, organB)
-    
-    test_res <- Perm_test(S_array, B, seed)
-    pval <- test_res$p_value
-    
-    cat("Done pair:", organA, "-", organB,
-        "p =", round(pval, 4), "\n")
-    
-    data.frame(
-      organA = organA,
-      organB = organB,
-      p_value = pval,
-      stringsAsFactors = FALSE
-    )
-    
-  }, mc.cores = ncores)
-  
-  results <- do.call(rbind, results_list)
-  rownames(results) <- NULL
-  
-  results
-}
-
-
-############# Graph ########
-
-
-build_graph_from_pvalues <- function(results, alpha = 0.05) {
-  
-  organs <- unique(c(results$organA, results$organB))
-  p <- length(organs)
-  
-  adj <- matrix(0, p, p)
-  rownames(adj) <- colnames(adj) <- organs
-  
-  for (i in seq_len(nrow(results))) {
-    
-    if (results$p_value[i] < alpha) {
-      
-      A <- results$organA[i]
-      B <- results$organB[i]
-      
-      adj[A, B] <- 1
-      adj[B, A] <- 1
-    }
-  }
-  
-  adj
-}
-
-
-graph_from_adj <- function(adj_matrix) {
-  graph_from_adjacency_matrix(adj_matrix,
-                              mode = "undirected",
-                              diag = FALSE)
-}
-
-plot_organ_graph <- function(adj_matrix) {
-  
-  g <- graph_from_adj(adj_matrix)
-  
-  plot(g,
-       layout = layout_with_fr(g), # Fruchterman-Reingold layout # or layout_in_circle(g)   
-       vertex.size = 30,
-       vertex.label.cex = 0.8,
-       edge.width = 2)
-}
-
-
-
-######### Examples 
-
-# Scenario 1 — Specific organs
-res_subset <- pairwise_metric_tests_parallel(
-  rest_data,
-  organs = c("heart","colon","LUL"),
-  B = 5000
-)
-
-# Scenario 2 — Random subset
-
-res_subset <- pairwise_metric_tests_parallel(
-  rest_data,
-  n_organs = 6,
-  seed = 123,
-  B = 500
-)
-
-# Scenario 3 — All organs
-
-res_all <- pairwise_metric_tests_parallel(
-  rest_data,
-  B = 1000
-)
-
-
-
-adj_matrix <- build_graph_from_pvalues(res_subset, alpha = 0.05)
-adj_matrix <- build_graph_from_pvalues(res_all, alpha = 0.05)
-
-plot_organ_graph(adj_matrix)
 
 #### Full verjon of permutation test where we have the metric skewness value
 
@@ -347,7 +275,7 @@ pairwise_metric_tests_parallel <- function(
     seed = 1818
 ) {
   
-
+  
   ncores <- detectCores() - 1
   
   all_organs <- get_organ_names(data_list)
@@ -383,7 +311,7 @@ pairwise_metric_tests_parallel <- function(
     organA <- pairs[[k]][1]
     organB <- pairs[[k]][2]
     
-    S_array <- get_pair_covariances(data_list, organA, organB)
+    S_array <- get_pair_corr(data_list, organA, organB)
     
     # weight = metric skewness
     skew_value <- metric_skew_fun(S_array)
@@ -417,7 +345,7 @@ pairwise_metric_tests_parallel <- function(
 
 build_weighted_graph <- function(results) {
   
-
+  
   organs <- unique(c(results$organA, results$organB))
   p <- length(organs)
   
@@ -430,7 +358,7 @@ build_weighted_graph <- function(results) {
     B <- results$organB[i]
     
     
-      w <- as.numeric(results$metric_skewness[i])
+    w <- as.numeric(results$rank_skew[i])
     
     
     adj[A, B] <- w
@@ -441,19 +369,48 @@ build_weighted_graph <- function(results) {
 }
 
 
+######### Examples 
 
-#### Example
+# Scenario 1 — Specific organs
+res_subset <- pairwise_metric_tests_parallel(
+  rest_data_clean,
+  organs = c("heart","colon","LUL"),
+  B = 5000
+)
 
+# Scenario 2 — Random subset
+
+res_subset <- pairwise_metric_tests_parallel(
+  rest_data,
+  n_organs = 6,
+  seed = 123,
+  B = 500
+)
+
+# Scenario 3 — All organs
 
 res_all_rest <- pairwise_metric_tests_parallel(
-  rest_data,
+  rest_data_clean,
   B = 1000
 )
 
+
 res_all_stress <- pairwise_metric_tests_parallel(
-  stress_data,
+  stress_data_clean,
   B = 1000
 )
+
+
+# adj_matrix <- build_graph_from_pvalues(res_subset, alpha = 0.0001)
+# adj_matrix <- build_graph_from_pvalues(res_all, alpha = 0.0001)
+#plot_organ_graph(adj_matrix)
+
+
+
+res_all_rest <- res_all_rest %>% mutate(rank_skew = rank(metric_skewness))
+res_all_stress <- res_all_stress %>% mutate(rank_skew = rank(metric_skewness))
+
+
 
 
 
@@ -462,71 +419,192 @@ adj_weighted_rest <- build_weighted_graph(res_all_rest)
 adj_weighted_stress <- build_weighted_graph(res_all_stress)
 
 
-thr <- quantile(adj_weighted_rest[adj_weighted_rest > 0], 0.13)
 
-adj_filtered <- adj_weighted_rest
-adj_filtered[adj_filtered < thr] <- 0
 
-g_rest <- graph_from_adjacency_matrix(adj_filtered,
-                                 mode = "undirected",
-                                 weighted = TRUE,
-                                 diag = FALSE)
-
-w <- abs(E(g_rest)$weight)
-
-w_scaled <- log1p(w)
-w_scaled <- 1 + 5*(w_scaled - min(w_scaled)) /
-  (max(w_scaled) - min(w_scaled))
-
-plot(
-  g_rest,
-  layout = layout_with_fr(g_rest),
-  vertex.size = 35,
-  edge.width = w_scaled,
-  vertex.label.cex = 0.8
-)
+# w <- abs(E(g_rest)$weight)
+# 
+# w_scaled <- log1p(w)
+# w_scaled <- 1 + 5*(w_scaled - min(w_scaled)) /
+#   (max(w_scaled) - min(w_scaled))
+# 
+# plot(
+#   g_rest,
+#   layout = layout_with_fr(g_rest),
+#   vertex.size = 35,
+#   edge.width = w_scaled,
+#   vertex.label.cex = 0.8
+# )
 
 
 
 
-thr <- quantile(adj_weighted_stress[adj_weighted_stress > 0], 0.13)
 
-adj_filtered <- adj_weighted_stress
-adj_filtered[adj_filtered < thr] <- 0
+par(mfrow = c(1, 2))  
 
-g_stress <- graph_from_adjacency_matrix(adj_filtered,
+
+ g_rest <- graph_from_adjacency_matrix(adj_weighted_rest,
                                       mode = "undirected",
                                       weighted = TRUE,
                                       diag = FALSE)
+ set.seed(42)
+ L <- layout_with_fr(g_rest)          # compute once
 
-w <- abs(E(g_stress)$weight)
-
-w_scaled <- log1p(w)
-w_scaled <- 1 + 5*(w_scaled - min(w_scaled)) /
-  (max(w_scaled) - min(w_scaled))
-
-plot(
-  g_stress,
-  layout = layout_with_fr(g_stress),
+ plot(
+  g_rest,
+  layout = L,
   vertex.size = 35,
-  edge.width = w_scaled,
-  vertex.label.cex = 0.8
+  edge.width = 1.5,
+  vertex.label.cex = 0.8,
+  edge.color = rev(gray.colors(105))[res_all_rest$rank_skew]
 )
 
+ mtext("rest network", side = 1, line = 1)
+ 
+ 
+ g_stress <- graph_from_adjacency_matrix(adj_weighted_stress,
+                                         mode = "undirected",
+                                         weighted = TRUE,
+                                         diag = FALSE)
+ set.seed(42)
+ L <- layout_with_fr(g_stress)          # compute once
+ 
+ 
 
+ plot(
+  g_stress,
+  layout = L,
+  vertex.size = 35,
+  edge.width = 1.5,
+  vertex.label.cex = 0.8,
+  edge.color = rev(gray.colors(105))[res_all_stress$rank_skew]
+)
 
+ mtext("Stress network", side = 1, line = 1)
 
 # mod_rest   <- modularity(cluster_louvain(g_rest))
 # mod_stress <- modularity(cluster_louvain(g_stress))
 # 
 # mod_rest > mod_stress
+ # L <- layout_with_fr(g_stress) 
+ # 
+ # p_stress <- ggraph(g_stress, layout = "manual", x = L[,1], y = L[,2]) +
+ #   geom_edge_link(aes(width = weight, color = res_all_stress$rank_skew),
+ #                  alpha = 0.8) +
+ #   geom_node_point(size = 5) +
+ #   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
+ #   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
+ #   theme_void()
+ # 
+ # 
+ # 
+ # 
+ # 
+ # L2 <- layout_with_fr(g_rest)
+ # 
+ # p_rest <- ggraph(g_rest, layout = "manual", x = L2[,1], y = L2[,2]) +
+ #   geom_edge_link(aes(width = weight, color = res_all_rest$rank_skew),
+ #                  alpha = 0.8) +
+ #   geom_node_point(size = 5) +
+ #   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
+ #   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
+ #   theme_void()
+ # 
+ # 
+ # p_stress + p_rest
+ 
+# clusters <- cluster_louvain(g_rest)
+# membership(clusters)
+# modularity(clusters)
+
+
+ischemia_ids <- clinical_data_clean %>%
+  filter(`ischemia/YES/NO` == "YES") %>%
+  pull(study_code)
+
+# rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
+# rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
+
+
+stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
+stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
+
+
+# res_rest_isch <- pairwise_metric_tests_full(rest_ischemia, B=2)
+# res_rest_no   <- pairwise_metric_tests_full(rest_noischemia, B=2)
 
 
 
 
-clusters <- cluster_louvain(g_rest)
-membership(clusters)
-modularity(clusters)
+res_stress_isch <- pairwise_metric_tests_parallel(stress_ischemia, B=1000)
+res_stress_isch <- res_stress_isch %>% mutate(rank_skew = rank(metric_skewness))
+
+res_stress_no   <- pairwise_metric_tests_parallel(stress_noischemia, B=1000)
+res_stress_no <- res_stress_no %>% mutate(rank_skew = rank(metric_skewness))
+
+# adj_rest_isch  <- build_weighted_graph(res_rest_isch, "effect")
+# adj_rest_no <- build_weighted_graph(res_rest_no, "effect")
+
+adj_st_isch  <- build_weighted_graph(res_stress_isch)
+adj_st_no <- build_weighted_graph(res_stress_no)
+
+# g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
+
+# g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
+#                                         mode="undirected",
+#                                         weighted=TRUE,
+#                                         diag=FALSE)
+
+
+
+g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
+                                          mode="undirected",
+                                          weighted=TRUE,
+                                          diag=FALSE)
+
+g_st_no <- graph_from_adjacency_matrix(adj_st_no,
+                                       mode="undirected",
+                                       weighted=TRUE,
+                                       diag=FALSE)
+
+
+# w_stisch <- E(g_st_isch)$weight
+# 
+# # Normalize to [1, 10] range
+# w_scaled_stisch <- 1 + 9 * (w_stisch - min(w_stisch)) / (max(w_stisch) - min(w_stisch))
+# 
+# 
+# w_stno <- E(g_st_no)$weight
+# 
+# # Normalize to [1, 10] range
+# w_scaled_stno <- 1 + 9 * (w_stno - min(w_stno)) / (max(w_stno) - min(w_stno))
+# 
+
+
+
+# layout_fixed <- layout_with_fr(g_rest_isch)
+# plot(g_rest_isch, layout=layout_fixed)
+# 
+# layout_fixed <- layout_with_fr(g_rest_no)
+# plot(g_rest_no, layout=layout_fixed)
+
+
+
+layout_fixed <- layout_with_fr(g_st_isch)
+plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
+plot(g_st_isch, layout=layout_fixed,
+     edge.color = rev(gray.colors(105))[res_stress_isch$rank_skew])
+
+
+
+
+
+layout_fixed <- layout_with_fr(g_st_no)
+plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
+plot(g_st_isch, layout=layout_fixed,
+     edge.color = rev(gray.colors(105))[res_stress_no$rank_skew])
 
 
 ############ Extra ############################
@@ -606,39 +684,7 @@ modularity(clusters)
 
 
 
-###########################
 
-
-clinical_data <- read_excel("/Users/vizama/Documents/Papers/2nd paper/Dataset/excel_aboutKoveriData.xlsx")
-
-
-clinical_data <- clinical_data %>%
-  mutate(across(everything(),
-                ~na_if(., "NA"))) %>%
-  mutate(across(everything(),
-                ~na_if(., "")))
-# Remove rows with ANY NA
-clinical_data_clean <- clinical_data %>%
-  filter(complete.cases(.))
-
-# Extract patient IDs from filenames
-rest_ids <- sub("_rest_15tacs.csv", "", rest_files)
-stress_ids <- sub("_stress_15tacs.csv", "", stress_files)
-
-rest_ids
-
-rest_data   <- lapply(rest_files, read_with_organs)
-stress_data <- lapply(stress_files, read_with_organs)
-
-
-names(rest_data)   <- rest_ids
-names(stress_data) <- stress_ids
-
-
-valid_ids <- clinical_data_clean$study_code
-
-rest_data_clean <- rest_data[names(rest_data) %in% valid_ids]
-stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
 
 # clinical_numeric <- clinical_data_clean %>%
 #   mutate(
@@ -742,77 +788,3 @@ stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
 #                                         diag=FALSE)
 
 
-ischemia_ids <- clinical_data_clean %>%
-  filter(`ischemia/YES/NO` == "YES") %>%
-  pull(study_code)
-
-# rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
-# rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
-
-
-stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
-stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
-
-
-# res_rest_isch <- pairwise_metric_tests_full(rest_ischemia, B=2)
-# res_rest_no   <- pairwise_metric_tests_full(rest_noischemia, B=2)
-
-st_rest_isch <- pairwise_metric_tests_full(stress_ischemia, B=2)
-st_rest_no   <- pairwise_metric_tests_full(stress_noischemia, B=2)
-
-# adj_rest_isch  <- build_weighted_graph(res_rest_isch, "effect")
-# adj_rest_no <- build_weighted_graph(res_rest_no, "effect")
-
-adj_st_isch  <- build_weighted_graph(st_rest_isch, "effect")
-adj_st_no <- build_weighted_graph(st_rest_no, "effect")
-
-# g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
-#                                         mode="undirected",
-#                                         weighted=TRUE,
-#                                         diag=FALSE)
-
-# g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
-#                                         mode="undirected",
-#                                         weighted=TRUE,
-#                                         diag=FALSE)
-
-
-
-g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
-                                            mode="undirected",
-                                            weighted=TRUE,
-                                            diag=FALSE)
-
-g_st_no <- graph_from_adjacency_matrix(adj_st_no,
-                                         mode="undirected",
-                                         weighted=TRUE,
-                                         diag=FALSE)
-
-
-w_stisch <- E(g_st_isch)$weight
-
-# Normalize to [1, 10] range
-w_scaled_stisch <- 1 + 9 * (w_stisch - min(w_stisch)) / (max(w_stisch) - min(w_stisch))
-
-
-w_stno <- E(g_st_no)$weight
-
-# Normalize to [1, 10] range
-w_scaled_stno <- 1 + 9 * (w_stno - min(w_stno)) / (max(w_stno) - min(w_stno))
-
-
-
-
-# layout_fixed <- layout_with_fr(g_rest_isch)
-# plot(g_rest_isch, layout=layout_fixed)
-# 
-# layout_fixed <- layout_with_fr(g_rest_no)
-# plot(g_rest_no, layout=layout_fixed)
-
-
-
-layout_fixed <- layout_with_fr(g_st_isch)
-plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
-
-layout_fixed <- layout_with_fr(g_st_no)
-plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
