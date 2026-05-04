@@ -391,13 +391,13 @@ res_subset <- pairwise_metric_tests_parallel(
 
 res_all_rest <- pairwise_metric_tests_parallel(
   rest_data_clean,
-  B = 1000
+  B = 5000
 )
 
 
 res_all_stress <- pairwise_metric_tests_parallel(
   stress_data_clean,
-  B = 1000
+  B = 5000
 )
 
 
@@ -453,12 +453,12 @@ par(mfrow = c(1, 2))
   g_rest,
   layout = L,
   vertex.size = 35,
-  edge.width = 1.5,
+  edge.width = 2,
   vertex.label.cex = 0.8,
   edge.color = rev(gray.colors(105))[res_all_rest$rank_skew]
 )
 
- mtext("rest network", side = 1, line = 1)
+ mtext("Rest", side = 1, line = 0)
  
  
  g_stress <- graph_from_adjacency_matrix(adj_weighted_stress,
@@ -470,7 +470,7 @@ par(mfrow = c(1, 2))
  
  
 
- plot(
+  plot(
   g_stress,
   layout = L,
   vertex.size = 35,
@@ -479,7 +479,10 @@ par(mfrow = c(1, 2))
   edge.color = rev(gray.colors(105))[res_all_stress$rank_skew]
 )
 
- mtext("Stress network", side = 1, line = 1)
+ mtext("Stress", side = 1, line = 0)
+ 
+ 
+
 
 # mod_rest   <- modularity(cluster_louvain(g_rest))
 # mod_stress <- modularity(cluster_louvain(g_stress))
@@ -521,53 +524,42 @@ ischemia_ids <- clinical_data_clean %>%
   filter(`ischemia/YES/NO` == "YES") %>%
   pull(study_code)
 
-# rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
-# rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
-
-
-stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
-stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
-
-
-# res_rest_isch <- pairwise_metric_tests_full(rest_ischemia, B=2)
-# res_rest_no   <- pairwise_metric_tests_full(rest_noischemia, B=2)
+rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
+rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
 
 
 
 
-res_stress_isch <- pairwise_metric_tests_parallel(stress_ischemia, B=1000)
-res_stress_isch <- res_stress_isch %>% mutate(rank_skew = rank(metric_skewness))
 
-res_stress_no   <- pairwise_metric_tests_parallel(stress_noischemia, B=1000)
-res_stress_no <- res_stress_no %>% mutate(rank_skew = rank(metric_skewness))
+res_rest_isch <- pairwise_metric_tests_parallel(rest_ischemia, B=5000)
+res_rest_isch <- res_rest_isch %>% mutate(rank_skew = rank(metric_skewness))
 
-# adj_rest_isch  <- build_weighted_graph(res_rest_isch, "effect")
-# adj_rest_no <- build_weighted_graph(res_rest_no, "effect")
 
-adj_st_isch  <- build_weighted_graph(res_stress_isch)
-adj_st_no <- build_weighted_graph(res_stress_no)
-
-# g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
-#                                         mode="undirected",
-#                                         weighted=TRUE,
-#                                         diag=FALSE)
-
-# g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
-#                                         mode="undirected",
-#                                         weighted=TRUE,
-#                                         diag=FALSE)
+res_rest_no   <- pairwise_metric_tests_parallel(rest_noischemia, B=5000)
+res_rest_no <- res_rest_no %>% mutate(rank_skew = rank(metric_skewness))
 
 
 
-g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
-                                          mode="undirected",
-                                          weighted=TRUE,
-                                          diag=FALSE)
 
-g_st_no <- graph_from_adjacency_matrix(adj_st_no,
-                                       mode="undirected",
-                                       weighted=TRUE,
-                                       diag=FALSE)
+
+adj_rest_isch  <- build_weighted_graph(res_rest_isch)
+adj_rest_no <- build_weighted_graph(res_rest_no)
+
+
+
+g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
+                                        mode="undirected",
+                                        weighted=TRUE,
+                                        diag=FALSE)
+
+g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
+                                        mode="undirected",
+                                        weighted=TRUE,
+                                        diag=FALSE)
+
+
+
+
 
 
 # w_stisch <- E(g_st_isch)$weight
@@ -586,25 +578,117 @@ g_st_no <- graph_from_adjacency_matrix(adj_st_no,
 
 # layout_fixed <- layout_with_fr(g_rest_isch)
 # plot(g_rest_isch, layout=layout_fixed)
-# 
+
+
+
 # layout_fixed <- layout_with_fr(g_rest_no)
 # plot(g_rest_no, layout=layout_fixed)
 
 
 
+par(mfrow= c(1,2))
+
+layout_fixed <- layout_with_fr(g_rest_isch)
+# plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
+plot(g_rest_isch, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
+     edge.color = rev(gray.colors(105))[res_rest_isch$rank_skew])
+
+mtext("Rest Ischemia", side = 1, line = 0)
+
+
+
+layout_fixed <- layout_with_fr(g_rest_no)
+# plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
+plot(g_rest_no, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
+     edge.color = rev(gray.colors(105))[res_rest_no$rank_skew])
+
+mtext("Rest No Ischemia", side = 1, line = 0)
+
+
+
+
+#### Stress
+
+
+stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
+stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
+
+res_stress_isch <- pairwise_metric_tests_parallel(stress_ischemia, B=5000)
+res_stress_isch <- res_stress_isch %>% mutate(rank_skew = rank(metric_skewness))
+
+res_stress_no   <- pairwise_metric_tests_parallel(stress_noischemia, B=5000)
+res_stress_no <- res_stress_no %>% mutate(rank_skew = rank(metric_skewness))
+
+
+
+adj_st_isch  <- build_weighted_graph(res_stress_isch)
+adj_st_no <- build_weighted_graph(res_stress_no)
+
+g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
+                                          mode="undirected",
+                                          weighted=TRUE,
+                                          diag=FALSE)
+
+g_st_no <- graph_from_adjacency_matrix(adj_st_no,
+                                       mode="undirected",
+                                       weighted=TRUE,
+                                       diag=FALSE)
+
+
+par(mfrow= c(2,2), mar = c(2, 2, 2, 2))
+
 layout_fixed <- layout_with_fr(g_st_isch)
-plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
+# plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
 plot(g_st_isch, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_stress_isch$rank_skew])
 
-
+mtext("Stress Ischemia", side = 1, line = 0)
 
 
 
 layout_fixed <- layout_with_fr(g_st_no)
-plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
-plot(g_st_isch, layout=layout_fixed,
+# plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
+plot(g_st_no, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_stress_no$rank_skew])
+
+mtext("Stress No Ischemia", side = 1, line = 0)
+
+
+
+layout_fixed <- layout_with_fr(g_rest_isch)
+# plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
+plot(g_rest_isch, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
+     edge.color = rev(gray.colors(105))[res_rest_isch$rank_skew])
+
+mtext("Rest Ischemia", side = 1, line = 0)
+
+
+
+layout_fixed <- layout_with_fr(g_rest_no)
+# plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
+plot(g_rest_no, layout=layout_fixed,
+     vertex.size = 35,
+     edge.width = 2,
+     vertex.label.cex = 0.8,
+     edge.color = rev(gray.colors(105))[res_rest_no$rank_skew])
+
+mtext("Rest No Ischemia", side = 1, line = 0)
+
 
 
 ############ Extra ############################
