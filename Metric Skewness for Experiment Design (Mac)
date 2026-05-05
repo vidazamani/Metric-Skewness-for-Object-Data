@@ -9,10 +9,25 @@ library(fda)
 
 
 
-################ Import data ######################
-### There are 102 patients all together 
+
+
+
+################ Import data ###############################################
+### There are 102 patients all together before data cleaning process 
 
 setwd('/Users/vizama/Documents/Papers/2nd paper/Dataset/PET data')
+clinical_data <- read_excel("/Users/vizama/Documents/Papers/2nd paper/Dataset/excel_aboutKoveriData.xlsx")
+
+
+
+clinical_data <- clinical_data %>%
+  mutate(across(everything(),
+                ~na_if(., "NA"))) %>%
+  mutate(across(everything(),
+                ~na_if(., "")))
+# Remove rows with ANY NA
+clinical_data_clean <- clinical_data %>%
+  filter(complete.cases(.)) %>% filter(study_code != "koveri0081")
 
 
 # vector of organ names
@@ -23,8 +38,6 @@ organNames <- c('spleen','kidney_right','kidney_left','liver','pancreas',
 # get all csv files
 all_files <- list.files()
 
-
-
 # helper function to read and add organ Names
 read_with_organs <- function(file) {
   df <- read.csv(file)
@@ -34,19 +47,31 @@ read_with_organs <- function(file) {
 }
 
 
-
 # split by category
 rest_files   <- grep("rest", all_files, value = TRUE)
 stress_files <- grep("stress", all_files, value = TRUE)
 
 
+# Extract patient IDs from filenames
+rest_ids <- sub("_rest_15tacs.csv", "", rest_files)
+stress_ids <- sub("_stress_15tacs.csv", "", stress_files)
+
 
 ######################################################################
 #### In this part, a data frame per each patient is created 
 
-
 rest_data   <- lapply(rest_files, read_with_organs)
 stress_data <- lapply(stress_files, read_with_organs)
+
+
+names(rest_data)   <- rest_ids
+names(stress_data) <- stress_ids
+
+
+valid_ids <- clinical_data_clean$study_code
+
+rest_data_clean <- rest_data[names(rest_data) %in% valid_ids]
+stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
 
 
 
@@ -54,8 +79,8 @@ stress_data <- lapply(stress_files, read_with_organs)
 ### In this part, a data frame for all patients per each organ is created
 
 # Combine all patients into one long data frame with patient ID
-rest_df <- bind_rows(rest_data, .id = "patient")
-stress_df <- bind_rows(stress_data, .id = "patient")
+rest_df <- bind_rows(rest_data_clean, .id = "patient")
+stress_df <- bind_rows(stress_data_clean, .id = "patient")
 
 
 # Function to split by organ
