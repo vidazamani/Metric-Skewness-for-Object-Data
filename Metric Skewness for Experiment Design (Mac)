@@ -176,9 +176,9 @@ ft_s_stress_2 <- smooth.fd(ft_stress_noisch, fdPar(ft_stress_noisch, 2, 1e4))
 par(mfrow = c(1, 2))
 
 plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Heart Ischemia', bty = "l", cex.main = 1.5, ylim = c(5000,40000))
+     main = 'Heart Ischemia', bty = "l", cex.main = 1.5, ylim = c(0,40000))
 lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress Ishemia', bty = "l", cex.main = 1.5, type = "l",ylim = c(5000,40000))
+     main = 'Heart Stress Ishemia', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
 
 
 legend("topright",
@@ -189,9 +189,9 @@ legend("topright",
 
 
 plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Heart No Ischemia', bty = "l", cex.main = 1.5,ylim = c(5000,40000))
+     main = 'Heart No Ischemia', bty = "l", cex.main = 1.5,ylim = c(0,40000))
 lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress no isch', bty = "l", cex.main = 1.5, type = "l",ylim = c(5000,40000))
+     main = 'Heart Stress no isch', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
 
 
 legend("topright",
@@ -226,7 +226,6 @@ df <- data.frame(
 )
 
 
-library(ggplot2)
 
 p1 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
   geom_line(linewidth = 1.2) +
@@ -331,44 +330,44 @@ ft_s_stress_2 <- smooth.fd(ft_stress_2, fdPar(ft_stress_2, 2, 1e4))
 
 
 
-par(mfrow = c(2, 2))
-
-plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Heart Rest', bty = "l", cex.main = 1.5)
-plot(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress', bty = "l", cex.main = 1.5)
-
-plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Spleen Rest', bty = "l", cex.main = 1.5)
-plot(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Spleen Stress', bty = "l", cex.main = 1.5)
-
-
+# par(mfrow = c(2, 2))
+# 
+# plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Heart Rest', bty = "l", cex.main = 1.5)
+# plot(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Heart Stress', bty = "l", cex.main = 1.5)
+# 
+# plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Spleen Rest', bty = "l", cex.main = 1.5)
+# plot(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Spleen Stress', bty = "l", cex.main = 1.5)
 
 
-par(mfrow = c(1, 2))
 
-plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Heart Rest', bty = "l", cex.main = 1.5)
-lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress', bty = "l", cex.main = 1.5)
 
-legend("topright",
-       legend = c("Rest", "Stress"),
-       col = c("black", "blue"),
-       lwd = 3,
-       bty = "o")
-
-plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
-     main = 'Spleen Rest', bty = "l", cex.main = 1.5)
-lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Spleen Stress', bty = "l", cex.main = 1.5)
-
-legend("topright",
-       legend = c("Rest", "Stress"),
-       col = c("black", "blue"),
-       lwd = 3,
-       bty = "o")
+# par(mfrow = c(1, 2))
+# 
+# plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Heart Rest', bty = "l", cex.main = 1.5)
+# lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Heart Stress', bty = "l", cex.main = 1.5)
+# 
+# legend("topright",
+#        legend = c("Rest", "Stress"),
+#        col = c("black", "blue"),
+#        lwd = 3,
+#        bty = "o")
+# 
+# plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Spleen Rest', bty = "l", cex.main = 1.5)
+# lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Spleen Stress', bty = "l", cex.main = 1.5)
+# 
+# legend("topright",
+#        legend = c("Rest", "Stress"),
+#        col = c("black", "blue"),
+#        lwd = 3,
+#        bty = "o")
 
 
 
@@ -395,14 +394,17 @@ df <- data.frame(
 )
 
 
-library(ggplot2)
 
 p2 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
   geom_line(linewidth = 1.2) +
   facet_wrap(~ Organ, nrow = 1) +
-  scale_color_manual(values = c("Rest" = "black", "Stress" = "blue")) +
+  scale_color_manual(values = c("Rest" = "green", "Stress" = "purple")) +
   labs(x = "Time (s)", y = "SUV") + 
-  theme_bw() 
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 13),
+        axis.title.y = element_text(size = 13))
   
 
 #############################################################################################
@@ -480,75 +482,75 @@ make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
 
 ############## Make patient array for Ischemia ##############
 
-make_patient_array_isch <- function(organ, isch, noisch, my_basis) {
-  # Extract data for one organ
-  data_isch   <- t((isch[[organ]][, -c(1,2)]))
-  data_noisch <- t((noisch[[organ]][, -c(1,2)]))
-  
-  data_noisch <- data_noisch[,sample(ncol(data_isch))]
-  #### Both rest and stress
-  data_rs <- cbind(data_isch, data_noisch)
-  
-  ################################## FDA #######################
-  
-  
-  ft_isch <- Data2fd(
-    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
-      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
-    data_isch, my_basis
-  )
-  
-  ft_noisch <- Data2fd(
-    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
-      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
-    data_noisch, my_basis
-  )
-  
-  ftt <- Data2fd(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
-                   62.5,67.5,75,85,95,110,130,150,175,205,235,265),
-                 data_rs, my_basis)
-  
-  ##### Smoothing 
-  
-  ft_s_isch <- smooth.fd(ft_isch, fdPar(ft_isch, 2, 1e4))
-  ft_s_noisch <- smooth.fd(ft_noisch, fdPar(ft_noisch, 2, 1e4))
-  ftt_s <- smooth.fd(ftt, fdPar(ftt, 2, 1e4))
-  
-  #### Get coefficients
-  #### Matrix with nbasis*npatients
-  
-  # coef_rest   <- coef(ft_rest)
-  # coef_stress <- coef(ft_stress)
-  
-  # coef_rest   <- coef(ft_s_rest)
-  # coef_stress <- coef(ft_s_stress)
-  
-  
-  coef_ftt <- coef(ftt_s)
-  coef_isch_2 <- coef_ftt[,1:ncol(data_isch)]
-  coef_noisch_2 <- coef_ftt[,(ncol(data_isch)+1):(ncol(data_rs))]
-  
-  nbasis    <- nrow(coef_isch_2)
-  npatients <- ncol(coef_isch_2)
-  
-  # Build patient_array
-  patient_array <- array(NA, dim = c(nbasis, 2, npatients),
-                         dimnames = list(
-                           paste0("basis", 1:nbasis),
-                           c("isch", "noisch"),
-                           paste0("patient", 1:npatients)
-                         ))
-  
-  for (i in 1:npatients) {
-    patient_array[, , i] <- cbind(
-      isch   = coef_isch_2[, i],
-      noisch = coef_noisch_2[, i]
-    )
-  }
-  
-  return(patient_array)
-}
-
+# make_patient_array_isch <- function(organ, isch, noisch, my_basis) {
+#   # Extract data for one organ
+#   data_isch   <- t((isch[[organ]][, -c(1,2)]))
+#   data_noisch <- t((noisch[[organ]][, -c(1,2)]))
+#   
+#   data_noisch <- data_noisch[,sample(ncol(data_isch))]
+#   #### Both rest and stress
+#   data_rs <- cbind(data_isch, data_noisch)
+#   
+#   ################################## FDA #######################
+#   
+#   
+#   ft_isch <- Data2fd(
+#     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#     data_isch, my_basis
+#   )
+#   
+#   ft_noisch <- Data2fd(
+#     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#     data_noisch, my_basis
+#   )
+#   
+#   ftt <- Data2fd(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#                    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#                  data_rs, my_basis)
+#   
+#   ##### Smoothing 
+#   
+#   ft_s_isch <- smooth.fd(ft_isch, fdPar(ft_isch, 2, 1e4))
+#   ft_s_noisch <- smooth.fd(ft_noisch, fdPar(ft_noisch, 2, 1e4))
+#   ftt_s <- smooth.fd(ftt, fdPar(ftt, 2, 1e4))
+#   
+#   #### Get coefficients
+#   #### Matrix with nbasis*npatients
+#   
+#   # coef_rest   <- coef(ft_rest)
+#   # coef_stress <- coef(ft_stress)
+#   
+#   # coef_rest   <- coef(ft_s_rest)
+#   # coef_stress <- coef(ft_s_stress)
+#   
+#   
+#   coef_ftt <- coef(ftt_s)
+#   coef_isch_2 <- coef_ftt[,1:ncol(data_isch)]
+#   coef_noisch_2 <- coef_ftt[,(ncol(data_isch)+1):(ncol(data_rs))]
+#   
+#   nbasis    <- nrow(coef_isch_2)
+#   npatients <- ncol(coef_isch_2)
+#   
+#   # Build patient_array
+#   patient_array <- array(NA, dim = c(nbasis, 2, npatients),
+#                          dimnames = list(
+#                            paste0("basis", 1:nbasis),
+#                            c("isch", "noisch"),
+#                            paste0("patient", 1:npatients)
+#                          ))
+#   
+#   for (i in 1:npatients) {
+#     patient_array[, , i] <- cbind(
+#       isch   = coef_isch_2[, i],
+#       noisch = coef_noisch_2[, i]
+#     )
+#   }
+#   
+#   return(patient_array)
+# }
+# 
 
 
 ############## Build arrays for all organs
@@ -570,13 +572,24 @@ organ_arrays <- lapply(organNames, function(org) {
 names(organ_arrays) <- organNames
 
 
-
-
 organ_arrays_isch <- lapply(organNames, function(org) {
-  make_patient_array_isch(org, rest_organs_ischemia, rest_organs_noischemia, my_basis)
+  make_patient_array(org, rest_organs_ischemia, stress_organs_ischemia, my_basis)
 })
 names(organ_arrays_isch) <- organNames
 
+
+organ_arrays_noisch <- lapply(organNames, function(org) {
+  make_patient_array(org, rest_organs_noischemia, stress_organs_noischemia, my_basis)
+})
+names(organ_arrays_noisch) <- organNames
+
+
+
+# organ_arrays_rest <- lapply(organNames, function(org) {
+#   make_patient_array_isch(org, rest_organs_ischemia, rest_organs_noischemia, my_basis)
+# })
+# names(organ_arrays_isch) <- organNames
+# 
 
 
 Permutation_test <- function(matrices, iter, seed){
@@ -656,7 +669,7 @@ Permutation_test <- function(matrices, iter, seed){
 
 start_time <- Sys.time()
 
-organ_results <- lapply(organ_arrays, Permutation_test,iter = 10, seed = 1111)
+organ_results <- lapply(organ_arrays, Permutation_test,iter = 2000, seed = 1111)
 
 end_time <- Sys.time()
 
@@ -682,14 +695,17 @@ p3 <- ggplot(summary_table, aes(x = organ, y = obs_stat, fill = significant)) +
   scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
   labs(
     title = "",
-    y = "Observed Test Statistic (Metric Skewness)",
+    y = "Observed Metric Skewness",
+    x = "",
     fill = "Significant (p < 0.05)"
   ) +
   theme_bw() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(hjust = 0.5)
-  )
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 13),
+    axis.title.y = element_text(size = 13)
+  ) 
 
 
 library(patchwork)
@@ -719,7 +735,7 @@ summary_table_isch$significant <- summary_table_isch$p_value < 0.05
 
 
 
-p4 <- ggplot(summary_table_isch, aes(x = organ, y = obs_stat, fill = significant)) +
+p_isch <- ggplot(summary_table_isch, aes(x = organ, y = obs_stat, fill = significant)) +
   geom_bar(stat = "identity") +
   scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
   labs(
@@ -736,11 +752,88 @@ p4 <- ggplot(summary_table_isch, aes(x = organ, y = obs_stat, fill = significant
 
 
 
+####### With No Ischemia labeling ########
+
+start_time <- Sys.time()
+
+organ_results_noisch <- lapply(organ_arrays_noisch, Permutation_test,iter = 2000, seed = 1111)
+
+end_time <- Sys.time()
+
+runtime <- end_time - start_time
+
+summary_table_noisch <- data.frame(
+  organ   = names(organ_results_noisch),
+  obs_stat = sapply(organ_results_noisch, function(x) x$observed),
+  p_value  = sapply(organ_results_noisch, function(x) x$p_value)
+)
+print(summary_table_noisch)
+
+# Add a logical column for significance
+summary_table_noisch$significant <- summary_table_noisch$p_value < 0.05
 
 
 
 
+p_noisch <- ggplot(summary_table_noisch, aes(x = organ, y = obs_stat, fill = significant)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
+  labs(
+    title = "",
+    y = "Observed Metric Skewness",
+    fill = "Significant (p < 0.05)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
 
+
+
+
+##### Three bar plots together ######
+
+summary_table_isch$group <- "Ischemia"
+summary_table_noisch$group <- "No Ischemia"
+summary_table$group <- "All Patients"   # <-- your third (bigger) dataset
+
+summary_all <- rbind(
+  summary_table_isch,
+  summary_table_noisch,
+  summary_table
+)
+
+summary_all$organ <- reorder(summary_all$organ, summary_all$obs_stat)
+summary_all$logobs <- log(summary_all$obs_stat)
+
+pall <- ggplot(summary_all, aes(x = organ, y = -logobs, fill = group)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  scale_fill_manual(values = c(
+    "Ischemia" = "red",
+    "No Ischemia" = "blue",
+    "All Patients" = "black"
+  )) +
+  labs(
+    x = NULL,
+    y = expression(-log[e](Observed~Metric~Skewness)),
+    fill = "Group"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    legend.position = "right"
+  ) +
+  geom_text(
+    aes(label = ifelse(significant, "", "*")),
+    position = position_dodge(width = 0.8),
+    vjust = -0.5,
+    size = 6
+  ) + ylim(-1,10)
+
+
+
+p2/pall
 
 
 
