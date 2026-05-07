@@ -12,6 +12,7 @@ library(readxl)
 library(dplyr)
 library(patchwork)
 library(ggraph)
+library(colorRamps)
 
 
 #####
@@ -442,14 +443,14 @@ adj_weighted_stress <- build_weighted_graph(res_all_stress)
 par(mfrow = c(1, 2))  
 
 
- g_rest <- graph_from_adjacency_matrix(adj_weighted_rest,
+g_rest <- graph_from_adjacency_matrix(adj_weighted_rest,
                                       mode = "undirected",
                                       weighted = TRUE,
                                       diag = FALSE)
- set.seed(42)
- L <- layout_with_fr(g_rest)          # compute once
+set.seed(42)
+L <- layout_with_fr(g_rest)          # compute once
 
- plot(
+plot(
   g_rest,
   layout = L,
   vertex.size = 35,
@@ -458,19 +459,19 @@ par(mfrow = c(1, 2))
   edge.color = rev(gray.colors(105))[res_all_rest$rank_skew]
 )
 
- mtext("Rest", side = 1, line = 0)
- 
- 
- g_stress <- graph_from_adjacency_matrix(adj_weighted_stress,
-                                         mode = "undirected",
-                                         weighted = TRUE,
-                                         diag = FALSE)
- set.seed(42)
- L <- layout_with_fr(g_stress)          # compute once
- 
- 
+mtext("Rest", side = 1, line = 0)
 
-  plot(
+
+g_stress <- graph_from_adjacency_matrix(adj_weighted_stress,
+                                        mode = "undirected",
+                                        weighted = TRUE,
+                                        diag = FALSE)
+set.seed(42)
+L <- layout_with_fr(g_stress)          # compute once
+
+
+
+plot(
   g_stress,
   layout = L,
   vertex.size = 35,
@@ -479,42 +480,42 @@ par(mfrow = c(1, 2))
   edge.color = rev(gray.colors(105))[res_all_stress$rank_skew]
 )
 
- mtext("Stress", side = 1, line = 0)
- 
- 
+mtext("Stress", side = 1, line = 0)
+
+
 
 
 # mod_rest   <- modularity(cluster_louvain(g_rest))
 # mod_stress <- modularity(cluster_louvain(g_stress))
 # 
 # mod_rest > mod_stress
- # L <- layout_with_fr(g_stress) 
- # 
- # p_stress <- ggraph(g_stress, layout = "manual", x = L[,1], y = L[,2]) +
- #   geom_edge_link(aes(width = weight, color = res_all_stress$rank_skew),
- #                  alpha = 0.8) +
- #   geom_node_point(size = 5) +
- #   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
- #   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
- #   theme_void()
- # 
- # 
- # 
- # 
- # 
- # L2 <- layout_with_fr(g_rest)
- # 
- # p_rest <- ggraph(g_rest, layout = "manual", x = L2[,1], y = L2[,2]) +
- #   geom_edge_link(aes(width = weight, color = res_all_rest$rank_skew),
- #                  alpha = 0.8) +
- #   geom_node_point(size = 5) +
- #   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
- #   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
- #   theme_void()
- # 
- # 
- # p_stress + p_rest
- 
+# L <- layout_with_fr(g_stress) 
+# 
+# p_stress <- ggraph(g_stress, layout = "manual", x = L[,1], y = L[,2]) +
+#   geom_edge_link(aes(width = weight, color = res_all_stress$rank_skew),
+#                  alpha = 0.8) +
+#   geom_node_point(size = 5) +
+#   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
+#   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
+#   theme_void()
+# 
+# 
+# 
+# 
+# 
+# L2 <- layout_with_fr(g_rest)
+# 
+# p_rest <- ggraph(g_rest, layout = "manual", x = L2[,1], y = L2[,2]) +
+#   geom_edge_link(aes(width = weight, color = res_all_rest$rank_skew),
+#                  alpha = 0.8) +
+#   geom_node_point(size = 5) +
+#   geom_node_text(aes(label = name), repel = TRUE, size = 5) +
+#   scale_edge_color_gradientn(colors = rev(gray.colors(105))) +
+#   theme_void()
+# 
+# 
+# p_stress + p_rest
+
 # clusters <- cluster_louvain(g_rest)
 # membership(clusters)
 # modularity(clusters)
@@ -548,14 +549,14 @@ adj_rest_no <- build_weighted_graph(res_rest_no)
 
 
 g_rest_isch  <- graph_from_adjacency_matrix(adj_rest_isch,
-                                        mode="undirected",
-                                        weighted=TRUE,
-                                        diag=FALSE)
+                                            mode="undirected",
+                                            weighted=TRUE,
+                                            diag=FALSE)
 
 g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
-                                        mode="undirected",
-                                        weighted=TRUE,
-                                        diag=FALSE)
+                                         mode="undirected",
+                                         weighted=TRUE,
+                                         diag=FALSE)
 
 
 
@@ -585,32 +586,33 @@ g_rest_no <- graph_from_adjacency_matrix(adj_rest_no,
 # plot(g_rest_no, layout=layout_fixed)
 
 
+col <- scales::seq_gradient_pal("blue", "white", "Lab")(seq(0,1,length.out=105))
+col <- gray.colors(105)
 
 par(mfrow= c(1,2))
 
-layout_fixed <- layout_with_fr(g_rest_isch)
+set.seed(1212)
+layout_fixed <- layout_with_fr(g_rest_no)
 # plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
 plot(g_rest_isch, layout=layout_fixed,
      vertex.size = 35,
      edge.width = 2,
      vertex.label.cex = 0.8,
-     edge.color = rev(gray.colors(105))[res_rest_isch$rank_skew])
+     edge.color = col[res_rest_isch$rank_skew])
 
 mtext("Rest Ischemia", side = 1, line = 0)
 
 
 
-layout_fixed <- layout_with_fr(g_rest_no)
+#layout_fixed <- layout_with_fr(g_rest_no)
 # plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
 plot(g_rest_no, layout=layout_fixed,
      vertex.size = 35,
      edge.width = 2,
      vertex.label.cex = 0.8,
-     edge.color = rev(gray.colors(105))[res_rest_no$rank_skew])
+     edge.color = col[res_rest_no$rank_skew])
 
 mtext("Rest No Ischemia", side = 1, line = 0)
-
-
 
 
 #### Stress
@@ -643,22 +645,73 @@ g_st_no <- graph_from_adjacency_matrix(adj_st_no,
 
 par(mfrow= c(2,2), mar = c(2, 2, 2, 2))
 
-layout_fixed <- layout_with_fr(g_st_isch)
+set.seed(1111)
+
+
+###############################################
+
+
+library(tibble)
+library(dplyr)
+library(igraph)
+
+organ_coords <- tribble(
+  ~name,              ~x,    ~y,
+  "brain",             0.0,  10.0,
+  "RUL",              -1.2,   7.1,
+  "RML",              -1.2,   5.9,
+  "RLL",              -1.2,   4.6,
+  "LUL",               1.2,   7.0,
+  "LLL",               1.2,   5.0,
+  "heart",             0.0,   6.0,
+  "aorta",             0.0,   4.8,
+  "liver",            -1.3,   3.4,
+  "spleen",            1.7,   3.3,
+  "pancreas",          0.2,   2.8,
+  "kidney_right",     -1.4,   2.1,
+  "kidney_left",       1.4,   2.1,
+  "colon",             0.0,   1.0,
+  "urinary_bladder",   0.0,  -0.4
+)
+# Given an igraph object g whose vertex names are organ names:
+
+make_organ_layout <- function(g, coords = mutate(organ_coords, x = 2 * x, y = 2 * y)) {
+  v <- tibble(name = V(g)$name)
+  
+  layout_tbl <- v %>%
+    left_join(coords, by = "name")
+  
+  # Optional fallback for unknown nodes
+  missing <- which(is.na(layout_tbl$x) | is.na(layout_tbl$y))
+  if (length(missing) > 0) {
+    fallback <- layout_with_fr(g)
+    layout_tbl$x[missing] <- fallback[missing, 1]
+    layout_tbl$y[missing] <- fallback[missing, 2]
+  }
+  
+  as.matrix(layout_tbl[, c("x", "y")])
+}
+
+
+
+
+
+layout_fixed <- make_organ_layout(g_st_no)
 # plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
 plot(g_st_isch, layout=layout_fixed,
-     vertex.size = 35,
+     vertex.size = 20,
      edge.width = 2,
      vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_stress_isch$rank_skew])
 
 mtext("Stress Ischemia", side = 1, line = 0)
 
-
-
-layout_fixed <- layout_with_fr(g_st_no)
+res_stress_isch[order(res_stress_isch$rank_skew, decreasing = TRUE)[1:10],]
+xtable::xtable(res_stress_isch[order(res_stress_isch$rank_skew, decreasing = TRUE)[1:10],])
+#layout_fixed <- layout_with_fr(g_st_no)
 # plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
 plot(g_st_no, layout=layout_fixed,
-     vertex.size = 35,
+     vertex.size = 20,
      edge.width = 2,
      vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_stress_no$rank_skew])
@@ -667,10 +720,10 @@ mtext("Stress No Ischemia", side = 1, line = 0)
 
 
 
-layout_fixed <- layout_with_fr(g_rest_isch)
+#layout_fixed <- layout_with_fr(g_rest_isch)
 # plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
 plot(g_rest_isch, layout=layout_fixed,
-     vertex.size = 35,
+     vertex.size = 20,
      edge.width = 2,
      vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_rest_isch$rank_skew])
@@ -679,15 +732,17 @@ mtext("Rest Ischemia", side = 1, line = 0)
 
 
 
-layout_fixed <- layout_with_fr(g_rest_no)
+#layout_fixed <- layout_with_fr(g_rest_no)
 # plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
 plot(g_rest_no, layout=layout_fixed,
-     vertex.size = 35,
+     vertex.size = 20,
      edge.width = 2,
      vertex.label.cex = 0.8,
      edge.color = rev(gray.colors(105))[res_rest_no$rank_skew])
 
 mtext("Rest No Ischemia", side = 1, line = 0)
+
+
 
 
 
@@ -870,5 +925,4 @@ mtext("Rest No Ischemia", side = 1, line = 0)
 #                                         mode="undirected",
 #                                         weighted=TRUE,
 #                                         diag=FALSE)
-
 
