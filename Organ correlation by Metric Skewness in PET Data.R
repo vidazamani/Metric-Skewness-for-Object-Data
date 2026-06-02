@@ -604,7 +604,7 @@ mtext("Rest Ischemia", side = 1, line = 0)
 
 
 
-#layout_fixed <- layout_with_fr(g_rest_no)
+# layout_fixed <- layout_with_fr(g_rest_isch)
 # plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
 plot(g_rest_no, layout=layout_fixed,
      vertex.size = 35,
@@ -630,6 +630,7 @@ res_stress_no <- res_stress_no %>% mutate(rank_skew = rank(metric_skewness))
 
 
 adj_st_isch  <- build_weighted_graph(res_stress_isch)
+
 adj_st_no <- build_weighted_graph(res_stress_no)
 
 g_st_isch  <- graph_from_adjacency_matrix(adj_st_isch,
@@ -676,7 +677,7 @@ organ_coords <- tribble(
 # Given an igraph object g whose vertex names are organ names:
 
 make_organ_layout <- function(g, coords = mutate(organ_coords, x = 2 * x, y = 2 * y)) {
-  v <- tibble(name = V(g)$name)
+  v <- tibble(name = igraph::V(g)$name)
   
   layout_tbl <- v %>%
     left_join(coords, by = "name")
@@ -695,7 +696,6 @@ make_organ_layout <- function(g, coords = mutate(organ_coords, x = 2 * x, y = 2 
 
 
 
-
 layout_fixed <- make_organ_layout(g_st_no)
 # plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
 plot(g_st_isch, layout=layout_fixed,
@@ -708,6 +708,10 @@ mtext("Stress Ischemia", side = 1, line = 0)
 
 res_stress_isch[order(res_stress_isch$rank_skew, decreasing = TRUE)[1:10],]
 xtable::xtable(res_stress_isch[order(res_stress_isch$rank_skew, decreasing = TRUE)[1:10],])
+
+
+
+
 #layout_fixed <- layout_with_fr(g_st_no)
 # plot(g_st_no, layout=layout_fixed, edge.width = w_scaled_stno)
 plot(g_st_no, layout=layout_fixed,
@@ -718,7 +722,8 @@ plot(g_st_no, layout=layout_fixed,
 
 mtext("Stress No Ischemia", side = 1, line = 0)
 
-
+res_stress_no[order(res_stress_no$rank_skew, decreasing = TRUE)[1:10],]
+xtable::xtable(res_stress_no[order(res_stress_no$rank_skew, decreasing = TRUE)[1:10],])
 
 #layout_fixed <- layout_with_fr(g_rest_isch)
 # plot(g_st_isch, layout=layout_fixed, edge.width =w_scaled_stisch)
@@ -729,6 +734,9 @@ plot(g_rest_isch, layout=layout_fixed,
      edge.color = rev(gray.colors(105))[res_rest_isch$rank_skew])
 
 mtext("Rest Ischemia", side = 1, line = 0)
+
+res_rest_isch[order(res_rest_isch$rank_skew, decreasing = TRUE)[1:10],]
+xtable::xtable(res_rest_isch[order(res_rest_isch$rank_skew, decreasing = TRUE)[1:10],])
 
 
 
@@ -743,7 +751,8 @@ plot(g_rest_no, layout=layout_fixed,
 mtext("Rest No Ischemia", side = 1, line = 0)
 
 
-
+res_rest_no[order(res_rest_no$rank_skew, decreasing = TRUE)[1:10],]
+xtable::xtable(res_rest_no[order(res_rest_no$rank_skew, decreasing = TRUE)[1:10],])
 
 
 ############ Extra ############################
