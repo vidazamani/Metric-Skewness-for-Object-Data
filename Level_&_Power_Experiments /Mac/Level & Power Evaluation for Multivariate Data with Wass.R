@@ -13,8 +13,8 @@ library(CompQuadForm)
 library(RcppHungarian)
 
 #####
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/mvdistmetricskew@V3')
+remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
+remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/mvdistmetricskew')
 library(LogDis)
 library(mvdistmetricskew)
 # ## OR 
