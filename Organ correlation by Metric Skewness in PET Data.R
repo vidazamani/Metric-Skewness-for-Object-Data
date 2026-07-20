@@ -16,7 +16,7 @@ library(colorRamps)
 
 
 #####
-#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
+#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
 library(LogDis)
 
 
