@@ -1,0 +1,329 @@
+###### Necessary Libraries #######
+library(CovTools) 
+library(shapes)
+library(ICtest)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(parallel)
+library(purrr)
+library(Rcpp)
+library(CompQuadForm)
+library(RcppHungarian)
+library(LogDis)
+library(couplr)
+library(TreeDist)
+library(clue)
+
+
+generate_matrices <- function(sample_size,dim,mu,sig) {
+  
+  replicate(sample_size, {
+    
+    U <- rorth(dim)
+    D <- diag(exp(rnorm(dim,mu,sig)))
+    S <- U%*%D%*%t(U)
+    
+    ## if you want to generate corr matrices, then run the code lines below
+    # diagS <- diag(S)
+    # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS))
+    
+  })
+  
+}
+
+
+n <- 100
+mats <- generate_matrices(n,3,0,1)
+
+
+# Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  # Bootstrap replicates
+ 
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    cost <- G0[1:(n/2), (n/2 + 1):n]
+
+min(cost)
+max(cost)
+microbenchmark::microbenchmark(
+  RcppHungarian = RcppHungarian::HungarianSolver(cost),
+  LAPJV = TreeDist::LAPJV(cost),
+  couplr_jv = couplr::assignment(cost, method = "jv"),
+  clue = {
+    a <- clue::solve_LSAP(cost)
+    list(cost = sum(cost[cbind(seq_along(a), a)]), pairs = cbind(seq_along(a), as.integer(a)))
+  },
+  times = 50L
+)
+
+
+
+HungarianSolver_couplr <- function(costMatrix, method = "jv", maximize = FALSE) {
+  stopifnot(is.matrix(costMatrix), is.numeric(costMatrix))
+  
+  res <- couplr::assignment(
+    cost = costMatrix,
+    maximize = maximize,
+    method = method
+  )
+  
+  assigned_rows <- which(res$match > 0L)
+  pairs <- cbind(
+    assigned_rows,
+    unname(res$match[assigned_rows])
+  )
+  
+  list(
+    cost = res$total_cost,
+    pairs = pairs,
+    status = res$status,
+    method_used = res$method_used
+  )
+}
+
+## Faster version of wasserstein_test (outer R + inner B)
+## Key changes vs your original:
+## 1) Avoids creating D0/G0 and Dhn0 via full n×n submatrix copies each iteration.
+##    Instead, it uses index vectors and extracts only the needed (n/2)×(n/2) corner.
+## 2) Builds the hybrid matrix H once per outer replicate (still needed).
+## 3) Uses sample.int() and preallocated vectors.
+
+wasserstein_test_fast <- function(mats, R, B){
+  n <- dim(mats)[3]
+  stopifnot(n %% 2L == 0L)
+  h <- n %/% 2L
+  
+  # Distance matrices (compute once)
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  pval_vec <- numeric(R)
+  
+  for (i in seq_len(R)) {
+    
+    ## Outer "bootstrap" permutation (random split)
+    b <- sample.int(n)
+    A0 <- b[1:h]              # first half indices under outer shuffle
+    B0 <- b[(h + 1L):n]       # second half indices under outer shuffle
+    
+    ## Observed cost: Hungarian on G_corner without forming G0
+    cost0 <- HungarianSolver_couplr(G[A0, B0])$cost
+    
+    ## Build hybrid matrix H for this outer replicate
+    ## (equivalent to building from D0,G0 and then block-binding)
+    H <- rbind(
+      cbind(D[A0, A0], G[A0, B0]),
+      cbind(t(G[A0, B0]), D[B0, B0])
+    )
+    
+    perm_costs <- numeric(B)
+    
+    ## Inner permutation loop (null)
+    for (j in seq_len(B)) {
+      p <- sample.int(n)
+      A <- p[1:h]
+      Bidx <- p[(h + 1L):n]
+      
+      # Extract cross-block directly; avoid H[p,p] and then cornering
+      perm_costs[j] <- HungarianSolver_couplr(H[A, Bidx])$cost
+    }
+    
+    # Same direction as your original code (<); change to <= if desired
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+wasserstein_test <- function(mats, R, B){
+  pval_vec <- rep(0, R)
+  
+  n <- dim(mats)[3]
+  
+  # Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  # Bootstrap replicates
+  for(i in 1:R){
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    G_corner <- G0[1:(n/2), (n/2 + 1):n]
+    
+    cost0 <- HungarianSolver(G_corner)$cost
+    
+    Dhn <- rbind(cbind(D0[1:(n/2), 1:(n/2)], G0[1:(n/2), (n/2 + 1):n]),
+                 cbind(t(G0[1:(n/2), (n/2 + 1):n]), D0[(n/2 + 1):n, (n/2 + 1):n]))
+    
+    perm_costs <- rep(0, B)
+    
+    # Permutation replicates
+    for(j in 1:B){
+      p_indices <- sample(1:n)
+      Dhn0 <- Dhn[p_indices, p_indices]
+      Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+      
+      perm_costs[j] <- HungarianSolver(Dhn0_corner)$cost
+    }
+    
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+
+wasserstein_test_1 <- function(mats, R, B){
+  pval_vec <- rep(0, R)
+  
+  n <- dim(mats)[3]
+  
+  # Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  # Bootstrap replicates
+  for(i in 1:R){
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    G_corner <- G0[1:(n/2), (n/2 + 1):n]
+    
+    
+    cost0 <- TreeDist::LAPJV(G_corner)[[1]]
+    
+    
+    Dhn <- rbind(cbind(D0[1:(n/2), 1:(n/2)], G0[1:(n/2), (n/2 + 1):n]),
+                 cbind(t(G0[1:(n/2), (n/2 + 1):n]), D0[(n/2 + 1):n, (n/2 + 1):n]))
+    
+    perm_costs <- rep(0, B)
+    
+    # Permutation replicates
+    for(j in 1:B){
+      p_indices <- sample(1:n)
+      Dhn0 <- Dhn[p_indices, p_indices]
+      Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+      
+      perm_costs[j] <- TreeDist::LAPJV(Dhn0_corner)[[1]]
+    }
+    
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+
+
+  
+  
+system.time({
+    wasserstein_test_1(matrices, 100,100)
+  })
+
+system.time({
+  wasserstein_test(matrices, 100,100)
+})
+
+system.time({
+  wasserstein_test_fast(matrices, 100,100)
+})
+
+
+
+####################################################################
+
+compare_hungarian_vs_lapjv <- function(mats, R, B, seed = 1L){
+  set.seed(seed)
+  
+  n <- dim(mats)[3]
+  stopifnot(n %% 2L == 0L)
+  h <- n %/% 2L
+  
+  # Distance matrices once
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  res <- vector("list", R)
+  
+  for (i in seq_len(R)) {
+    b <- sample.int(n)
+    D0 <- D[b, b]
+    G0 <- G[b, b]
+    
+    # Observed corner
+    Cobs <- G0[1:h, (h+1L):n]
+    cost_h_obs <- RcppHungarian::HungarianSolver(Cobs)$cost
+    cost_l_obs <- TreeDist::LAPJV(Cobs)[[1]]
+    
+    # Hybrid matrix
+    H <- rbind(
+      cbind(D0[1:h, 1:h],              G0[1:h, (h+1L):n]),
+      cbind(t(G0[1:h, (h+1L):n]),      D0[(h+1L):n, (h+1L):n])
+    )
+    
+    # Permuted corners
+    cost_h_perm <- numeric(B)
+    cost_l_perm <- numeric(B)
+    
+    for (j in seq_len(B)) {
+      p <- sample.int(n)
+      H0 <- H[p, p]
+      Cperm <- H0[1:h, (h+1L):n]
+      
+      cost_h_perm[j] <- RcppHungarian::HungarianSolver(Cperm)$cost
+      cost_l_perm[j] <- TreeDist::LAPJV(Cperm)[[1]]
+    }
+    
+    res[[i]] <- data.frame(
+      outer_rep = i,
+      kind      = c("observed", rep("permuted", B)),
+      inner_rep = c(NA_integer_, seq_len(B)),
+      hungarian = c(cost_h_obs, cost_h_perm),
+      lapjv     = c(cost_l_obs, cost_l_perm)
+    )
+  }
+  
+  df <- do.call(rbind, res)
+  df$diff <- df$lapjv - df$hungarian
+  df
+}
+
+
+df <- compare_hungarian_vs_lapjv(mats, R = 50, B = 200, seed = 123)
+
+summary(df$diff)
+max(abs(df$diff), na.rm = TRUE)
+
+
+hist(df$diff, breaks = 60,
+     main = "Cost difference: LAPJV - HungarianSolver",
+     xlab = "difference")
+
+plot(df$hungarian, df$lapjv, pch = 16, cex = 0.5,
+     xlab = "HungarianSolver cost",
+     ylab = "TreeDist::LAPJV cost")
+abline(0, 1, col = "red", lwd = 2)
+
+
+
+
+
+
+
+

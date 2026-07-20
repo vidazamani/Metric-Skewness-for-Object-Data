@@ -1,0 +1,939 @@
+
+## Libraries 
+library(dplyr)
+Sys.setenv(RGL_USE_NULL=TRUE)
+library(CovTools)
+library(ICtest)
+library(ggplot2)
+library(fda)
+
+
+
+
+
+
+################ Import data ###############################################
+### There are 102 patients all together before data cleaning process 
+
+setwd('/Users/vizama/Documents/Papers/2nd paper/Dataset/PET data')
+clinical_data <- read_excel("/Users/vizama/Documents/Papers/2nd paper/Dataset/excel_aboutKoveriData.xlsx")
+
+
+
+clinical_data <- clinical_data %>%
+  mutate(across(everything(),
+                ~na_if(., "NA"))) %>%
+  mutate(across(everything(),
+                ~na_if(., "")))
+# Remove rows with ANY NA
+clinical_data_clean <- clinical_data %>%
+  filter(complete.cases(.)) %>% filter(study_code != "koveri0081")
+
+
+# vector of organ names
+organNames <- c('spleen','kidney_right','kidney_left','liver','pancreas',
+                'LUL','LLL','RUL','RML','RLL',
+                'colon','urinary_bladder','heart','aorta','brain')
+
+# get all csv files
+all_files <- list.files()
+
+# helper function to read and add organ Names
+read_with_organs <- function(file) {
+  df <- read.csv(file)
+  df <- df[, -1]                          # remove first column
+  df <- cbind(organ = organNames, df)     # add organ column
+  return(df)
+}
+
+
+# split by category
+rest_files   <- grep("rest", all_files, value = TRUE)
+stress_files <- grep("stress", all_files, value = TRUE)
+
+
+# Extract patient IDs from filenames
+rest_ids <- sub("_rest_15tacs.csv", "", rest_files)
+stress_ids <- sub("_stress_15tacs.csv", "", stress_files)
+
+
+######################################################################
+#### In this part, a data frame per each patient is created 
+
+rest_data   <- lapply(rest_files, read_with_organs)
+stress_data <- lapply(stress_files, read_with_organs)
+
+
+names(rest_data)   <- rest_ids
+names(stress_data) <- stress_ids
+
+
+valid_ids <- clinical_data_clean$study_code
+
+rest_data_clean <- rest_data[names(rest_data) %in% valid_ids]
+stress_data_clean <- stress_data[names(stress_data) %in% valid_ids]
+
+
+
+ischemia_ids <- clinical_data_clean %>%
+  filter(`ischemia/YES/NO` == "YES") %>%
+  pull(study_code)
+
+rest_ischemia   <- rest_data_clean[names(rest_data_clean) %in% ischemia_ids]
+rest_noischemia <- rest_data_clean[!names(rest_data_clean) %in% ischemia_ids]
+
+stress_ischemia   <- stress_data_clean[names(stress_data_clean) %in% ischemia_ids]
+stress_noischemia <- stress_data_clean[!names(stress_data_clean) %in% ischemia_ids]
+
+# Combine all patients into one long data frame with patient ID
+rest_df_ischemia <- bind_rows(rest_ischemia, .id = "patient")
+rest_df_noischemia <- bind_rows(rest_noischemia, .id = "patient")
+
+
+stress_df_ischemia <- bind_rows(stress_ischemia, .id = "patient")
+stress_df_noischemia <- bind_rows(stress_noischemia, .id = "patient")
+
+# Function to split by organ
+split_by_organ <- function(df) {
+  split(df, df$organ)   
+}
+
+rest_organs_ischemia   <- split_by_organ(rest_df_ischemia)
+stress_organs_ischemia <- split_by_organ(stress_df_ischemia)
+
+
+rest_organs_noischemia   <- split_by_organ(rest_df_noischemia)
+stress_organs_noischemia <- split_by_organ(stress_df_noischemia)
+
+##################################################### Visualization #############################
+# organ <- 'heart'
+# organ <- 'spleen'
+
+### average on all patients 
+
+### REST
+dr_ischemia <- rest_organs_ischemia$heart[,-c(1,2)]
+ddr_1 <- apply(dr_ischemia, 2, mean)
+
+
+dr_noischemia <- rest_organs_noischemia$heart[,-c(1,2)]
+ddr_2 <- apply(dr_noischemia, 2, mean)
+
+### Stress
+
+ds_ischemia <- stress_organs_ischemia$heart[,-c(1,2)]
+dds_1 <- apply(ds_ischemia, 2, mean)
+
+
+ds_noischemia <- stress_organs_noischemia$heart[,-c(1,2)]
+dds_2 <- apply(ds_noischemia, 2, mean)
+
+
+
+#### Define the basis
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+ft_rest_isch <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_1, my_basis
+)
+
+ft_rest_noisch <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_2, my_basis
+)
+
+
+
+ft_stress_isch <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_1, my_basis
+)
+
+ft_stress_noisch <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_2, my_basis
+)
+
+
+##### Smoothing 
+
+ft_s_rest_1 <- smooth.fd(ft_rest_isch, fdPar(ft_rest_isch, 2, 1e4))
+ft_s_stress_1 <- smooth.fd(ft_stress_isch, fdPar(ft_stress_isch, 2, 1e4))
+
+
+ft_s_rest_2 <- smooth.fd(ft_rest_noisch, fdPar(ft_rest_noisch, 2, 1e4))
+ft_s_stress_2 <- smooth.fd(ft_stress_noisch, fdPar(ft_stress_noisch, 2, 1e4))
+
+
+
+
+par(mfrow = c(1, 2))
+
+plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+     main = 'Heart Ischemia', bty = "l", cex.main = 1.5, ylim = c(0,40000))
+lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+     main = 'Heart Stress Ishemia', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
+
+
+legend("topright",
+       legend = c("Rest", "Stress"),
+       col = c("black", "blue"),
+       lwd = 3,
+       bty = "o")
+
+
+plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+     main = 'Heart No Ischemia', bty = "l", cex.main = 1.5,ylim = c(0,40000))
+lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+     main = 'Heart Stress no isch', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
+
+
+legend("topright",
+       legend = c("Rest", "Stress"),
+       col = c("black", "blue"),
+       lwd = 3,
+       bty = "o")
+
+
+
+
+### ggplot version 
+
+time <- seq(0, 260, length.out = 200)
+
+rest_1   <- eval.fd(time, ft_s_rest_1)
+stress_1 <- eval.fd(time, ft_s_stress_1)
+
+rest_2   <- eval.fd(time, ft_s_rest_2)
+stress_2 <- eval.fd(time, ft_s_stress_2)
+
+
+
+df <- data.frame(
+  Time = rep(time, 4),
+  SUV = c(rest_1, stress_1, rest_2, stress_2),
+  Condition = rep(c("Rest", "Stress", "Rest", "Stress"),
+                  each = length(time)),
+  Group = rep(c("Heart Ischemia", "Heart Ischemia",
+                "Heart No Ischemia", "Heart No Ischemia"),
+              each = length(time))
+)
+
+
+
+p1 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~ Group, nrow = 1) +
+  scale_color_manual(values = c("Rest" = "black", "Stress" = "blue")) +
+  coord_cartesian(ylim = c(5000, 40000)) +
+  labs(
+    x = "Time (s)",
+    y = "SUV"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    legend.position = "right"
+  )
+
+
+
+#######################################################################
+### In this part, a data frame for all patients per each organ is created
+
+# Combine all patients into one long data frame with patient ID
+rest_df <- bind_rows(rest_data_clean, .id = "patient")
+stress_df <- bind_rows(stress_data_clean, .id = "patient")
+
+
+# Function to split by organ
+split_by_organ <- function(df) {
+  split(df, df$organ)   
+}
+
+rest_organs   <- split_by_organ(rest_df)
+stress_organs <- split_by_organ(stress_df)
+
+##################################################### Visualization #############################
+# organ <- 'heart'
+# organ <- 'spleen'
+
+### average on all patients 
+
+### REST
+dr_1 <- rest_organs$heart[,-c(1,2)]
+ddr_1 <- apply(dr_1, 2, mean)
+
+
+dr_2 <- rest_organs$spleen[,-c(1,2)]
+ddr_2 <- apply(dr_2, 2, mean)
+
+### Stress
+
+ds_1 <- stress_organs$heart[,-c(1,2)]
+dds_1 <- apply(ds_1, 2, mean)
+
+
+ds_2 <- stress_organs$spleen[,-c(1,2)]
+dds_2 <- apply(ds_2, 2, mean)
+
+
+
+
+
+#### Define the basis
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+ft_rest_1 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_1, my_basis
+)
+
+ft_rest_2 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  ddr_2, my_basis
+)
+
+
+
+ft_stress_1 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_1, my_basis
+)
+
+ft_stress_2 <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  dds_2, my_basis
+)
+
+
+##### Smoothing 
+
+ft_s_rest_1 <- smooth.fd(ft_rest_1, fdPar(ft_rest_1, 2, 1e4))
+ft_s_stress_1 <- smooth.fd(ft_stress_1, fdPar(ft_stress_1, 2, 1e4))
+
+
+ft_s_rest_2 <- smooth.fd(ft_rest_2, fdPar(ft_rest_2, 2, 1e4))
+ft_s_stress_2 <- smooth.fd(ft_stress_2, fdPar(ft_stress_2, 2, 1e4))
+
+
+
+
+# par(mfrow = c(2, 2))
+# 
+# plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Heart Rest', bty = "l", cex.main = 1.5)
+# plot(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Heart Stress', bty = "l", cex.main = 1.5)
+# 
+# plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Spleen Rest', bty = "l", cex.main = 1.5)
+# plot(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Spleen Stress', bty = "l", cex.main = 1.5)
+
+
+
+
+# par(mfrow = c(1, 2))
+# 
+# plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Heart Rest', bty = "l", cex.main = 1.5)
+# lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Heart Stress', bty = "l", cex.main = 1.5)
+# 
+# legend("topright",
+#        legend = c("Rest", "Stress"),
+#        col = c("black", "blue"),
+#        lwd = 3,
+#        bty = "o")
+# 
+# plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
+#      main = 'Spleen Rest', bty = "l", cex.main = 1.5)
+# lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
+#      main = 'Spleen Stress', bty = "l", cex.main = 1.5)
+# 
+# legend("topright",
+#        legend = c("Rest", "Stress"),
+#        col = c("black", "blue"),
+#        lwd = 3,
+#        bty = "o")
+
+
+
+
+
+library(fda)
+
+time <- seq(0, 260, length.out = 200)  # or your real time grid
+
+rest_1_vals   <- eval.fd(time, ft_s_rest_1)
+stress_1_vals <- eval.fd(time, ft_s_stress_1)
+
+rest_2_vals   <- eval.fd(time, ft_s_rest_2)
+stress_2_vals <- eval.fd(time, ft_s_stress_2)
+
+df <- data.frame(
+  Time = rep(time, 4),
+  SUV = c(rest_1_vals, stress_1_vals,
+          rest_2_vals, stress_2_vals),
+  Condition = rep(c("Rest", "Stress", "Rest", "Stress"),
+                  each = length(time)),
+  Organ = rep(c("Heart", "Heart", "Spleen", "Spleen"),
+              each = length(time))
+)
+
+
+
+p2 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
+  geom_line(linewidth = 1.2) +
+  facet_wrap(~ Organ, nrow = 1) +
+  scale_color_manual(values = c("Rest" = "green", "Stress" = "purple")) +
+  labs(x = "Time (s)", y = "SUV") + 
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 10),
+        axis.text.y = element_text(size = 10),
+        axis.title.x = element_text(size = 13),
+        axis.title.y = element_text(size = 13))
+  
+
+#############################################################################################
+
+make_patient_array <- function(organ, rest_organs, stress_organs, my_basis) {
+  # Extract data for one organ
+  data_rest   <- t((rest_organs[[organ]][, -c(1,2)]))
+  data_stress <- t((stress_organs[[organ]][, -c(1,2)]))
+  
+  #### Both rest and stress
+  data_rs <- cbind(data_rest,data_stress)
+  
+  ################################## FDA #######################
+  
+  
+  ft_rest <- Data2fd(
+    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+    data_rest, my_basis
+  )
+  
+  ft_stress <- Data2fd(
+    c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+      62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+    data_stress, my_basis
+  )
+  
+  ftt <- Data2fd(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+                   62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+                 data_rs, my_basis)
+  
+  ##### Smoothing 
+  
+  ft_s_rest <- smooth.fd(ft_rest, fdPar(ft_rest, 2, 1e4))
+  ft_s_stress <- smooth.fd(ft_stress, fdPar(ft_stress, 2, 1e4))
+  ftt_s <- smooth.fd(ftt, fdPar(ftt, 2, 1e4))
+  
+  #### Get coefficients
+  #### Matrix with nbasis*npatients
+  
+  # coef_rest   <- coef(ft_rest)
+  # coef_stress <- coef(ft_stress)
+  
+  # coef_rest   <- coef(ft_s_rest)
+  # coef_stress <- coef(ft_s_stress)
+  
+  
+  coef_ftt <- coef(ftt_s)
+  coef_rest_2 <- coef_ftt[,1:ncol(data_rest)]
+  coef_stress_2 <- coef_ftt[,(ncol(data_rest)+1):(2*ncol(data_rest))]
+  
+  nbasis    <- nrow(coef_rest_2)
+  npatients <- ncol(coef_rest_2)
+  
+  # Build patient_array
+  patient_array <- array(NA, dim = c(nbasis, 2, npatients),
+                         dimnames = list(
+                           paste0("basis", 1:nbasis),
+                           c("rest", "stress"),
+                           paste0("patient", 1:npatients)
+                         ))
+  
+  for (i in 1:npatients) {
+    patient_array[, , i] <- cbind(
+      rest   = coef_rest_2[, i],
+      stress = coef_stress_2[, i]
+    )
+  }
+  
+  return(patient_array)
+}
+
+
+
+
+############## Make patient array for Ischemia ##############
+
+# make_patient_array_isch <- function(organ, isch, noisch, my_basis) {
+#   # Extract data for one organ
+#   data_isch   <- t((isch[[organ]][, -c(1,2)]))
+#   data_noisch <- t((noisch[[organ]][, -c(1,2)]))
+#   
+#   data_noisch <- data_noisch[,sample(ncol(data_isch))]
+#   #### Both rest and stress
+#   data_rs <- cbind(data_isch, data_noisch)
+#   
+#   ################################## FDA #######################
+#   
+#   
+#   ft_isch <- Data2fd(
+#     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#     data_isch, my_basis
+#   )
+#   
+#   ft_noisch <- Data2fd(
+#     c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#       62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#     data_noisch, my_basis
+#   )
+#   
+#   ftt <- Data2fd(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+#                    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+#                  data_rs, my_basis)
+#   
+#   ##### Smoothing 
+#   
+#   ft_s_isch <- smooth.fd(ft_isch, fdPar(ft_isch, 2, 1e4))
+#   ft_s_noisch <- smooth.fd(ft_noisch, fdPar(ft_noisch, 2, 1e4))
+#   ftt_s <- smooth.fd(ftt, fdPar(ftt, 2, 1e4))
+#   
+#   #### Get coefficients
+#   #### Matrix with nbasis*npatients
+#   
+#   # coef_rest   <- coef(ft_rest)
+#   # coef_stress <- coef(ft_stress)
+#   
+#   # coef_rest   <- coef(ft_s_rest)
+#   # coef_stress <- coef(ft_s_stress)
+#   
+#   
+#   coef_ftt <- coef(ftt_s)
+#   coef_isch_2 <- coef_ftt[,1:ncol(data_isch)]
+#   coef_noisch_2 <- coef_ftt[,(ncol(data_isch)+1):(ncol(data_rs))]
+#   
+#   nbasis    <- nrow(coef_isch_2)
+#   npatients <- ncol(coef_isch_2)
+#   
+#   # Build patient_array
+#   patient_array <- array(NA, dim = c(nbasis, 2, npatients),
+#                          dimnames = list(
+#                            paste0("basis", 1:nbasis),
+#                            c("isch", "noisch"),
+#                            paste0("patient", 1:npatients)
+#                          ))
+#   
+#   for (i in 1:npatients) {
+#     patient_array[, , i] <- cbind(
+#       isch   = coef_isch_2[, i],
+#       noisch = coef_noisch_2[, i]
+#     )
+#   }
+#   
+#   return(patient_array)
+# }
+# 
+
+
+############## Build arrays for all organs
+
+
+#my_basis <- create.fourier.basis(c(0, 265), 6)
+
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+
+### organ_array is a list of 15 elements. 
+### Each element is a 3D array 
+### Each element: (nbasis x treatment x patient) array for that organ
+
+organ_arrays <- lapply(organNames, function(org) {
+  make_patient_array(org, rest_organs, stress_organs, my_basis)
+})
+names(organ_arrays) <- organNames
+
+
+organ_arrays_isch <- lapply(organNames, function(org) {
+  make_patient_array(org, rest_organs_ischemia, stress_organs_ischemia, my_basis)
+})
+names(organ_arrays_isch) <- organNames
+
+
+organ_arrays_noisch <- lapply(organNames, function(org) {
+  make_patient_array(org, rest_organs_noischemia, stress_organs_noischemia, my_basis)
+})
+names(organ_arrays_noisch) <- organNames
+
+
+
+# organ_arrays_rest <- lapply(organNames, function(org) {
+#   make_patient_array_isch(org, rest_organs_ischemia, rest_organs_noischemia, my_basis)
+# })
+# names(organ_arrays_isch) <- organNames
+# 
+
+
+Permutation_test <- function(matrices, iter, seed){
+  
+  
+  set.seed(seed)
+  
+  # Average squared distances between all patient matrices
+  average_squared_distances <- function(matrices) {
+    n <- dim(matrices)[3]
+    sapply(1:n, function(i) {
+      mean(sapply(1:n,
+                  function(j) if (i != j) norm(matrices[, , i]-
+                                                 matrices[, , j],
+                                               type ='F')^2 else 0))
+    })
+  }
+  
+  
+  # Average squared distances when rest/stress are swapped 
+  average_squared_distances_inverted <- function(matrices) {
+    n <- nrow(matrices)
+    inverted_matrices <- matrices[, c(2, 1), ]
+    n <- dim(matrices)[3]
+    sapply(1:n, function(i) {
+      mean(sapply(1:n, function(j) norm(matrices[, , i]- 
+                                          inverted_matrices[, , j],
+                                        type ='F')^2))
+    })
+  }
+  
+  
+  # Compute the test statistic (Metric Skewness)
+  compute_stat <- function(matrices) {
+    avg_dist_orig <- average_squared_distances(matrices)
+    avg_dist_inv <- average_squared_distances_inverted(matrices)
+    
+    mean((avg_dist_orig - avg_dist_inv)^2) / mean(avg_dist_orig^2)
+  }
+  
+  
+  P_swap <- matrix(c(0,1,
+                     1,0), nrow = 2)
+  
+  
+  
+  nbasis <- dim(matrices)[1]
+  npatients <- dim(matrices)[3]
+  
+  perm_stats <- numeric(iter)
+  
+  for (b in 1:iter) {
+    perm_array <- matrices
+    
+    for (i in 1:npatients) {
+      # randomly decide whether to swap rest/stress for this patient
+      if (sample(c(TRUE, FALSE), 1)) {
+        perm_array[, , i] <- perm_array[, , i] %*% P_swap
+      }
+    }
+    
+    # Compute your test statistic on permuted array
+    perm_stats[b] <- compute_stat(perm_array)  
+  }
+  
+  obs_stat <- compute_stat(matrices)
+  p_val <- mean(perm_stats >= obs_stat)
+  
+  
+  result <- list(perm_stats,obs_stat, p_val)
+  names(result) <- c("perm_stats", "observed", "p_value")
+  result
+}
+
+
+#######
+
+start_time <- Sys.time()
+
+organ_results <- lapply(organ_arrays, Permutation_test,iter = 2000, seed = 1111)
+
+end_time <- Sys.time()
+
+runtime <- end_time - start_time
+
+
+
+summary_table <- data.frame(
+  organ   = names(organ_results),
+  obs_stat = sapply(organ_results, function(x) x$observed),
+  p_value  = sapply(organ_results, function(x) x$p_value)
+)
+print(summary_table)
+
+# Add a logical column for significance
+summary_table$significant <- summary_table$p_value < 0.05
+
+
+
+
+p3 <- ggplot(summary_table, aes(x = organ, y = obs_stat, fill = significant)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
+  labs(
+    title = "",
+    y = "Observed Metric Skewness",
+    x = "",
+    fill = "Significant (p < 0.05)"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 13),
+    axis.title.y = element_text(size = 13)
+  ) 
+
+
+library(patchwork)
+
+p2/p3
+
+####### With Ischemia labeling ########
+
+start_time <- Sys.time()
+
+organ_results_isch <- lapply(organ_arrays_isch, Permutation_test,iter = 2000, seed = 1111)
+
+end_time <- Sys.time()
+
+runtime <- end_time - start_time
+
+summary_table_isch <- data.frame(
+  organ   = names(organ_results_isch),
+  obs_stat = sapply(organ_results_isch, function(x) x$observed),
+  p_value  = sapply(organ_results_isch, function(x) x$p_value)
+)
+print(summary_table_isch)
+
+# Add a logical column for significance
+summary_table_isch$significant <- summary_table_isch$p_value < 0.05
+
+
+
+
+p_isch <- ggplot(summary_table_isch, aes(x = organ, y = obs_stat, fill = significant)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
+  labs(
+    title = "",
+    y = "Observed Test Statistic (Metric Skewness)",
+    fill = "Significant (p < 0.05)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+
+
+####### With No Ischemia labeling ########
+
+start_time <- Sys.time()
+
+organ_results_noisch <- lapply(organ_arrays_noisch, Permutation_test,iter = 2000, seed = 1111)
+
+end_time <- Sys.time()
+
+runtime <- end_time - start_time
+
+summary_table_noisch <- data.frame(
+  organ   = names(organ_results_noisch),
+  obs_stat = sapply(organ_results_noisch, function(x) x$observed),
+  p_value  = sapply(organ_results_noisch, function(x) x$p_value)
+)
+print(summary_table_noisch)
+
+# Add a logical column for significance
+summary_table_noisch$significant <- summary_table_noisch$p_value < 0.05
+
+
+
+
+p_noisch <- ggplot(summary_table_noisch, aes(x = organ, y = obs_stat, fill = significant)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("FALSE" = "grey", "TRUE" = "red")) +
+  labs(
+    title = "",
+    y = "Observed Metric Skewness",
+    fill = "Significant (p < 0.05)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5)
+  )
+
+
+
+
+##### Three bar plots together ######
+
+summary_table_isch$group <- "Ischemia"
+summary_table_noisch$group <- "No Ischemia"
+summary_table$group <- "All Patients"   # <-- your third (bigger) dataset
+
+summary_all <- rbind(
+  summary_table_isch,
+  summary_table_noisch,
+  summary_table
+)
+
+summary_all$organ <- reorder(summary_all$organ, summary_all$obs_stat)
+summary_all$logobs <- log(summary_all$obs_stat)
+
+pall <- ggplot(summary_all, aes(x = organ, y = -logobs, fill = group)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  scale_fill_manual(values = c(
+    "Ischemia" = "red",
+    "No Ischemia" = "blue",
+    "All Patients" = "black"
+  )) +
+  labs(
+    x = NULL,
+    y = expression(-log[e](Observed~Metric~Skewness)),
+    fill = "Group"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    legend.position = "right"
+  ) +
+  geom_text(
+    aes(label = ifelse(significant, "", "*")),
+    position = position_dodge(width = 0.8),
+    vjust = -0.5,
+    size = 6
+  ) + ylim(-1,10)
+
+
+
+p2/pall
+
+
+
+
+
+######################### One organ only ##########################
+test_result <- Permutation_test(organ_arrays$spleen,2,2222)
+
+############ Visualization 
+
+perm_stats <- test_result$perm_stats
+obs_stat <- test_result$observed
+
+hist(perm_stats, breaks = 2,
+     main = "Permutation Test",
+     xlab = "Test Statistic (Average Squared Distance)",
+     col = "lightblue", border = "white")
+
+# Add observed statistic
+abline(v = obs_stat, col = "red", lwd = 2)
+
+# Optional: add legend
+legend("topright", legend = c("Observed"), col = "red", lwd = 2)
+
+
+
+
+# Create a data frame for plotting
+plot_df <- data.frame(test_stat = perm_stats)
+
+ggplot(plot_df, aes(x = test_stat)) +
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue", color = "white") +
+  geom_density(color = "blue", size = 1) +
+  geom_vline(xintercept = obs_stat, color = "red", linetype = "dashed", size = 1.2) +
+  annotate("text", x = obs_stat, y = max(density(perm_stats)$y)*0.9, 
+           label = paste0("Obs = ", round(obs_stat, 5)), color = "red", hjust = -0.1) +
+  annotate("text", x = mean(perm_stats), y = max(density(perm_stats)$y)*0.8, 
+           label = paste0("p = ", signif(p_val, 3)), color = "black") +
+  labs(title = "Permutation Test",
+       x = "Test Statistic (Average Squared Distance)",
+       y = "Density") +
+  theme_minimal(base_size = 14)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################### FDA Vis #######################
+organ <- 'heart'
+
+data_rest   <- t((rest_organs[[organ]][, -c(1,2)]))
+
+
+my_basis <- create.bspline.basis(c(0, 265), 100, 4)
+
+
+ft_rest <- Data2fd(
+  c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+    62.5,67.5,75,85,95,110,130,150,175,205,235,265),
+  data_rest, my_basis
+)
+
+
+
+plot(ft_rest[1])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+plot(ft_stress[1,])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+
+ft_s_rest <- smooth.fd(ft_rest, fdPar(ft_rest, 2, 1e4))
+
+plot(ft_s_rest[1])
+points(c(2.5,7.5,12.5,17.5,22.5,27.5,32.5,37.5,42.5,47.5,52.5,57.5,
+         62.5,67.5,75,85,95,110,130,150,175,205,235,265),unlist(c(rest_organs$heart[1,c(-1,-2)])))
+
+
+
+
+
+
+# pca_fd <- pca.fd(ft, nharm = 3)   # 3  (principal components)
+# plot.pca.fd(pca_fd, harm = 1:2)
