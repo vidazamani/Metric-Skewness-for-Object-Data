@@ -178,7 +178,7 @@ par(mfrow = c(1, 2))
 plot(ft_s_rest_1,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
      main = 'Heart Ischemia', bty = "l", cex.main = 1.5, ylim = c(0,40000))
 lines(ft_s_stress_1,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress Ishemia', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
+      main = 'Heart Stress Ishemia', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
 
 
 legend("topright",
@@ -191,7 +191,7 @@ legend("topright",
 plot(ft_s_rest_2,xlab="Time (s)", ylab="SUV", col="black", lwd=3,
      main = 'Heart No Ischemia', bty = "l", cex.main = 1.5,ylim = c(0,40000))
 lines(ft_s_stress_2,xlab="Time (s)", ylab="SUV", col="blue", lwd=3,
-     main = 'Heart Stress no isch', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
+      main = 'Heart Stress no isch', bty = "l", cex.main = 1.5, type = "l",ylim = c(0,40000))
 
 
 legend("topright",
@@ -399,13 +399,13 @@ p2 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
   geom_line(linewidth = 1.2) +
   facet_wrap(~ Organ, nrow = 1) +
   scale_color_manual(values = c("Rest" = "green", "Stress" = "purple")) +
-  labs(x = "Time (s)", y = "SUV") + 
+  labs(x = "Time (s)", y = "Concentration (Bq/ml)") + 
   theme_bw() +
   theme(axis.text.x = element_text(size = 10),
         axis.text.y = element_text(size = 10),
         axis.title.x = element_text(size = 13),
         axis.title.y = element_text(size = 13))
-  
+
 
 #############################################################################################
 
@@ -825,11 +825,14 @@ pall <- ggplot(summary_all, aes(x = organ, y = -logobs, fill = group)) +
     legend.position = "right"
   ) +
   geom_text(
-    aes(label = ifelse(significant, "", "*")),
+    aes(label = ifelse(significant, "", "×")),
     position = position_dodge(width = 0.8),
     vjust = -0.5,
-    size = 6
+    size = 7
   ) + ylim(-1,10)
+
+
+
 
 
 
