@@ -13,7 +13,7 @@ library(RcppHungarian)
 library(TreeDist)
 
 #####
-#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package@V3')
+#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
 library(LogDis)
 # ## OR 
 # sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
