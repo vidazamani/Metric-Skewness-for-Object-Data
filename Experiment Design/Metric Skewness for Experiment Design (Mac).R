@@ -230,18 +230,17 @@ df <- data.frame(
 p1 <- ggplot(df, aes(x = Time, y = SUV, color = Condition)) +
   geom_line(linewidth = 1.2) +
   facet_wrap(~ Group, nrow = 1) +
-  scale_color_manual(values = c("Rest" = "black", "Stress" = "blue")) +
+  scale_color_manual(values = c("Rest" = "green", "Stress" = "purple")) +
   coord_cartesian(ylim = c(5000, 40000)) +
   labs(
     x = "Time (s)",
-    y = "SUV"
+    y = "Concentration (Bq/ml)"
   ) +
   theme_bw() +
   theme(
     strip.text = element_text(face = "bold"),
     legend.position = "right"
   )
-
 
 
 #######################################################################
