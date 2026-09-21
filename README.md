@@ -10,8 +10,8 @@ The following list shows which files can be used to replicate which simulation s
 - Section 4.1.1 simulation - 
 - Section 4.1.2 first simulation - 
 - Section 5, Power and Level evaluation:
-  - 5.1 (Multivariate Data) file [MV data fast.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Level_%26_Power_Experiments%20/Mac/MV%20Data%20Fast.R) which reproduce figure 3 & 4
-  - 5.2 (Covariance Data) file [SPD fast.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Level_%26_Power_Experiments%20/Mac/SPD%20Fast.R) which reproduce figure 5 & 6
+  - 5.1 (Multivariate Data) file [MV data fast.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Level_%26_Power_Experiments%20/Mac/MV%20Data%20Fast.R) which reproduce figures 2 & 3
+  - 5.2 (Covariance Data) file [SPD fast.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Level_%26_Power_Experiments%20/Mac/SPD%20Fast.R) which reproduce figures 5 & 6
   - 5.3 (Hypothesis tests Runtime) file [timing study.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Level_%26_Power_Experiments%20/Mac/Timing%20Study.R) which reproduce figure 7
 - Section 6, real data example:
   - Experiment 1 (Figure 8) - file [Organ correlation by Metric Skewness in PET Data.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Organ%20correlation%20by%20Metric%20Skewness%20in%20PET%20Data.R).
