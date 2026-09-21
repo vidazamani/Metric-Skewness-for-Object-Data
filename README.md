@@ -10,6 +10,6 @@ The following list shows which files can be used to replicate which simulation s
 - Section 4.1.1 simulation - [Simulation/Sim on Corr C++ version.R](https://github.com/vidazamani/Depth-functions-for-Object-Data/blob/main/Simulation/Sim%20on%20Corr%20C%2B%2B%20version).
 - Section 4.1.2 first simulation - [Simulation/Sim on Sphere C++ version.R](https://github.com/vidazamani/Depth-functions-for-Object-Data/blob/main/Simulation/Sim%20on%20Sphere%20C%2B%2B%20version).
 - Section 5 second simulation - [Simulation/large_p_simulation.R](https://github.com/vidazamani/Depth-functions-for-Object-Data/blob/main/Simulation/large_p_simulation.R).
-- Section 6 real data example, Experiment 1 (Figure 8) - file [Organ correlation by Metric Skewness in PET Data.R](https://github.com/vidazamani/Depth-functions-for-Object-Data/tree/main/Other%20Optimizations).
+- Section 6 real data example, Experiment 1 (Figure 8) - file [Organ correlation by Metric Skewness in PET Data.R](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/blob/main/Organ%20correlation%20by%20Metric%20Skewness%20in%20PET%20Data.R).
 - Section 6 real data example, Experiment 2 (Figure 9)- file ***Metric Skewness for Experiment Design (Mac).R*** in the folder [Experiment Design](https://github.com/vidazamani/Metric-Skewness-for-Object-Data/tree/main/Experiment%20Design) 
 
