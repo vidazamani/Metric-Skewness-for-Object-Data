@@ -3,7 +3,7 @@
 This project contains code to reproduce the results of the paper named 'Metric Skewness for Object Data' by Zamanifarizhandi, V. Kujala, J. Rinio, O. Kl&eacute;n, R and Virta, J.
 
 
-### Replicating the examples in the paper
+### Replicating figures and simultions in the paper
 
 The following list shows which files can be used to replicate which simulation study in the manuscript:
 
