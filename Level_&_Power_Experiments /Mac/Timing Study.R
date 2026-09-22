@@ -319,7 +319,7 @@ Asymp_metric_skewness_spd <- function(mats) {
 # G = squared distance matrix from original to flipped
 # R = number of bootstrap reps
 # B = number of premutation reps
-wasserstein_test <- function(mats, R, B){
+wasserstein_test_lapjv <- function(mats, R, B){
   pval_vec <- rep(0, R)
   
   n <- dim(mats)[3]
@@ -370,7 +370,7 @@ wasserstein_test <- function(mats, R, B){
 # Assumes that n is even
 # B = number of permutation reps
 
-wasserstein_test_2 <- function(mats, B){
+wasserstein_test_lapjv_single <- function(mats, B){
   
   n <- dim(mats)[3]
   
@@ -406,245 +406,460 @@ wasserstein_test_2 <- function(mats, B){
 
 
 
+#################### Wasserstein- Hungerian bootstrap-permutation test  #########
+# Assumes that n is even
+#
+# D = squared distance matrix
+# G = squared distance matrix from original to flipped
+# R = number of bootstrap reps
+# B = number of premutation reps
+wasserstein_test_hung <- function(mats, R, B){
+  pval_vec <- rep(0, R)
+  
+  n <- dim(mats)[3]
+  
+  # Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  
+  # Bootstrap replicates
+  for(i in 1:R){
+    b_indices <- sample(1:n)
+    
+    D0 <- D[b_indices, b_indices]
+    G0 <- G[b_indices, b_indices]
+    
+    G_corner <- G0[1:(n/2), (n/2 + 1):n]
+    
+    cost0 <- HungarianSolver(G_corner)$cost
+    
+    Dhn <- rbind(cbind(D0[1:(n/2), 1:(n/2)], G0[1:(n/2), (n/2 + 1):n]),
+                 cbind(t(G0[1:(n/2), (n/2 + 1):n]), D0[(n/2 + 1):n, (n/2 + 1):n]))
+    
+    perm_costs <- rep(0, B)
+    
+    # Permutation replicates
+    for(j in 1:B){
+      p_indices <- sample(1:n)
+      Dhn0 <- Dhn[p_indices, p_indices]
+      Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+      
+      perm_costs[j] <- HungarianSolver(Dhn0_corner)$cost
+    }
+    
+    pval_vec[i] <- mean(cost0 < perm_costs)
+  }
+  
+  mean(pval_vec)
+}
+
+# Wasserstein-2 permutation test for skewness
+# Single-rep version suggested by Janne
+#
+# Assumes that n is even
+# B = number of permutation reps
+
+wasserstein_test_hung_single <- function(mats, B){
+  
+  n <- dim(mats)[3]
+  
+  
+  # Distance matrices
+  D <- distance_logeuclid_cpp(mats)
+  G <- distance_to_inverse_logeuclid_cpp(mats)
+  
+  G_corner <- G[1:(n/2), (n/2 + 1):n]
+  
+  cost0 <- HungarianSolver(G_corner)$cost
+  
+  Dhn <- rbind(cbind(D[1:(n/2), 1:(n/2)], G[1:(n/2), (n/2 + 1):n]),
+               cbind(t(G[1:(n/2), (n/2 + 1):n]), D[(n/2 + 1):n, (n/2 + 1):n]))
+  
+  perm_costs <- rep(0, B)
+  
+  # Permutation replicates
+  for(j in 1:B){
+    p_indices <- sample(1:n)
+    Dhn0 <- Dhn[p_indices, p_indices]
+    Dhn0_corner <- Dhn0[1:(n/2), (n/2 + 1):n]
+    
+    perm_costs[j] <- HungarianSolver(Dhn0_corner)$cost
+  }
+  
+  mean(cost0 <= perm_costs)
+}
 
 
-  
 
-  
-  
 
-  
+
+
+
+
 # ─────────────────────────────────────────────────────────────
 # Timing Study
 # ─────────────────────────────────────────────────────────────
-  
-  # Fixed parameters
-  dim       <- 3       # matrix dimension
-  mu        <- 0       # mean 
-  sig       <- 1       # Sigma
-  n_rep     <- 50      # number of repetitions per sample size
-  iter_perm <- 200     # iterations for Perm_test
-  R_wass    <- 50      # bootstrap replicates for wasserstein_test
-  B_wass    <- 200     # permutation replicates for wasserstein tests
-  reg       <- 0       # regularization parameter for Perm_test
-  
-  sample_sizes <- c(20, 50, 100, 200)
-  
+
+# Fixed parameters
+dim       <- 3       # matrix dimension
+mu        <- 0       # mean 
+sig       <- 1       # Sigma
+n_rep     <- 50      # number of repetitions per sample size
+iter_perm <- 200     # iterations for Perm_test
+R_wass    <- 50      # bootstrap replicates for wasserstein_test
+B_wass    <- 200     # permutation replicates for wasserstein tests
+reg       <- 0       # regularization parameter for Perm_test
+
+sample_sizes <- c(20, 50, 100, 200)
+
 # Storage: one row per sample size, columns = mean & SD for each test
-  results <- data.frame(
-    sample_size          = sample_sizes,
-    perm_mean            = NA_real_,
-    perm_sd              = NA_real_,
-    asymp_mean           = NA_real_,
-    asymp_sd             = NA_real_,
-    wass_mean            = NA_real_,
-    wass_sd              = NA_real_,
-    wass2_mean           = NA_real_,
-    wass2_sd             = NA_real_
-  )
+results <- data.frame(
+  sample_size          = sample_sizes,
+  perm_mean            = NA_real_,
+  perm_sd              = NA_real_,
+  asymp_mean           = NA_real_,
+  asymp_sd             = NA_real_,
+  wass_lapjv_mean            = NA_real_,
+  wass_lapjv_sd              = NA_real_,
+  wass_lapjv_single_mean     = NA_real_,
+  wass_lapjv_single_sd       = NA_real_,
+  wass_hung_mean             = NA_real_,
+  wass_hung_sd               = NA_real_,
+  wass_hung_single_mean      = NA_real_,
+  wass_hung_single_sd        = NA_real_
+)
+
+# ─────────────────────────────────────────────────────────────
+# Main timing loop
+# ─────────────────────────────────────────────────────────────
+
+for (s in seq_along(sample_sizes)) {
   
-  # ─────────────────────────────────────────────────────────────
-  # Main timing loop
-  # ─────────────────────────────────────────────────────────────
+  n <- sample_sizes[s]
+  cat(sprintf("\n── Sample size: %d ──\n", n))
   
-  for (s in seq_along(sample_sizes)) {
-    
-    n <- sample_sizes[s]
-    cat(sprintf("\n── Sample size: %d ──\n", n))
-    
-    # Pre-generate all replicate datasets to ensure fair comparison
-    datasets <- lapply(1:n_rep, function(x) generate_matrices(n, dim, mu, sig))
-    
-    # ── 1. Perm_test ──────────────────────────────────────────
-    cat("  Running Perm_test...\n")
-    t_perm <- numeric(n_rep)
-    for (r in 1:n_rep) {
-      t_perm[r] <- system.time(
-        Perm_test(datasets[[r]], iter = iter_perm, regularize = reg)
-      )["elapsed"]
-    }
-    
-    # ── 2. Asymp_metric_skewness_spd ──────────────────────────
-    cat("  Running Asymp_metric_skewness_spd...\n")
-    t_asymp <- numeric(n_rep)
-    for (r in 1:n_rep) {
-      t_asymp[r] <- system.time(
-        Asymp_metric_skewness_spd(datasets[[r]])
-      )["elapsed"]
-    }
-    
-    # ── 3. wasserstein_test ───────────────────────────────────
-    cat("  Running wasserstein_test...\n")
-    t_wass <- numeric(n_rep)
-    for (r in 1:n_rep) {
-      t_wass[r] <- system.time(
-        wasserstein_test(datasets[[r]], R = R_wass, B = B_wass)
-      )["elapsed"]
-    }
-    
-    # ── 4. wasserstein_test_2 ─────────────────────────────────
-    cat("  Running wasserstein_test_2...\n")
-    t_wass2 <- numeric(n_rep)
-    for (r in 1:n_rep) {
-      t_wass2[r] <- system.time(
-        wasserstein_test_2(datasets[[r]], B = B_wass)
-      )["elapsed"]
-    }
-    
-    # ── Store results ─────────────────────────────────────────
-    results[s, "perm_mean"]  <- mean(t_perm);   results[s, "perm_sd"]  <- sd(t_perm)
-    results[s, "asymp_mean"] <- mean(t_asymp);  results[s, "asymp_sd"] <- sd(t_asymp)
-    results[s, "wass_mean"]  <- mean(t_wass);   results[s, "wass_sd"]  <- sd(t_wass)
-    results[s, "wass2_mean"] <- mean(t_wass2);  results[s, "wass2_sd"] <- sd(t_wass2)
-    
+  # Pre-generate all replicate datasets to ensure fair comparison
+  datasets <- lapply(1:n_rep, function(x) generate_matrices(n, dim, mu, sig))
+  
+  # ── 1. Perm_test ──────────────────────────────────────────
+  cat("  Running Perm_test...\n")
+  t_perm <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_perm[r] <- system.time(
+      Perm_test(datasets[[r]], iter = iter_perm, regularize = reg)
+    )["elapsed"]
   }
   
+  # ── 2. Asymp_metric_skewness_spd ──────────────────────────
+  cat("  Running Asymp_metric_skewness_spd...\n")
+  t_asymp <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_asymp[r] <- system.time(
+      Asymp_metric_skewness_spd(datasets[[r]])
+    )["elapsed"]
+  }
+  
+  # ── 3. wasserstein_test_lapjv ───────────────────────────────────
+  cat("  Running wasserstein_test_lapjv...\n")
+  t_wass_lapjv <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_wass_lapjv[r] <- system.time(
+      wasserstein_test_lapjv(datasets[[r]], R = R_wass, B = B_wass)
+    )["elapsed"]
+  }
+  
+  # ── 4. wasserstein_test_lapjv_single ─────────────────────────────────
+  cat("  Running wasserstein_test_lapjv_single...\n")
+  t_wass_lapjv_single <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_wass_lapjv_single[r] <- system.time(
+      wasserstein_test_lapjv_single(datasets[[r]], B = B_wass)
+    )["elapsed"]
+  }
+  
+  # ── 5. wasserstein_test_hung ───────────────────────────────────
+  cat("  Running wasserstein_test_hung...\n")
+  t_wass_hung <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_wass_hung[r] <- system.time(
+      wasserstein_test_hung(datasets[[r]], R = R_wass, B = B_wass)
+    )["elapsed"]
+  }
+  
+  # ── 6. wasserstein_test_hung_single ─────────────────────────────────
+  cat("  Running wasserstein_test_hung_single...\n")
+  t_wass_hung_single <- numeric(n_rep)
+  for (r in 1:n_rep) {
+    t_wass_hung_single[r] <- system.time(
+      wasserstein_test_hung_single(datasets[[r]], B = B_wass)
+    )["elapsed"]
+  }
+  
+  # ── Store results ─────────────────────────────────────────
+  results[s, "perm_mean"]  <- mean(t_perm);   
+  results[s, "perm_sd"]  <- sd(t_perm)
+  results[s, "asymp_mean"] <- mean(t_asymp);  
+  results[s, "asymp_sd"] <- sd(t_asymp)
+  results[s, "wass_lapjv_mean"]  <- mean(t_wass_lapjv);   
+  results[s, "wass_lapjv_sd"]  <- sd(t_wass_lapjv)
+  results[s, "wass_lapjv_single_mean"] <- mean(t_wass_lapjv_single) 
+  results[s, "wass_lapjv_single_sd"] <- sd(t_wass_lapjv_single)
+  results[s, "wass_hung_mean"]  <- mean(t_wass_hung) 
+  results[s, "wass_hung_sd"]  <- sd(t_wass_hung)
+  results[s, "wass_hung_single_mean"] <- mean(t_wass_hung_single)  
+  results[s, "wass_hung_single_sd"] <- sd(t_wass_hung_single)
+  
+}
+
 # ─────────────────────────────────────────────────────────────
 # Print summary table
 # ─────────────────────────────────────────────────────────────
-  
-  cat("\n\n══════════════════════════════════════════════════════════════\n")
-  cat("Timing Study Results (seconds) — averaged over", n_rep, "replications\n")
-  cat("══════════════════════════════════════════════════════════════\n\n")
-  
-  print(
-    data.frame(
-      n             = results$sample_size,
-      Perm          = sprintf("%.4f (%.4f)", results$perm_mean,  results$perm_sd),
-      Asymp         = sprintf("%.4f (%.4f)", results$asymp_mean, results$asymp_sd),
-      Wasserstein   = sprintf("%.4f (%.4f)", results$wass_mean,  results$wass_sd),
-      Wasserstein_2 = sprintf("%.4f (%.4f)", results$wass2_mean, results$wass2_sd)
-    ),
-    row.names = FALSE
-  )
-  
-  
+
+
+print(
+  data.frame(
+    n                  = results$sample_size,
+    
+    Perm               = sprintf("%.4f (%.4f)",
+                                 results$perm_mean,
+                                 results$perm_sd),
+    
+    Asymp              = sprintf("%.4f (%.4f)",
+                                 results$asymp_mean,
+                                 results$asymp_sd),
+    
+    Wass_LapJV         = sprintf("%.4f (%.4f)",
+                                 results$wass_lapjv_mean,
+                                 results$wass_lapjv_sd),
+    
+    Wass_LapJV_Single  = sprintf("%.4f (%.4f)",
+                                 results$wass_lapjv_single_mean,
+                                 results$wass_lapjv_single_sd),
+    
+    Wass_Hung          = sprintf("%.4f (%.4f)",
+                                 results$wass_hung_mean,
+                                 results$wass_hung_sd),
+    
+    Wass_Hung_Single   = sprintf("%.4f (%.4f)",
+                                 results$wass_hung_single_mean,
+                                 results$wass_hung_single_sd)
+  ),
+  row.names = FALSE
+)
+
+
+
+
 library(ggplot2)
 library(tidyr)
 library(dplyr)
-  
+
 # ─────────────────────────────────────────────────────────────
 # Reshape results into long format for ggplot2
 # ─────────────────────────────────────────────────────────────
-  
+
+
 results_long <- results %>%
-    # Means
-    select(sample_size, perm_mean, asymp_mean, wass_mean, wass2_mean) %>%
-    pivot_longer(
-      cols      = -sample_size,
-      names_to  = "test",
-      values_to = "mean_time"
-    ) %>%
-    # SDs
-    left_join(
-      results %>%
-        select(sample_size, perm_sd, asymp_sd, wass_sd, wass2_sd) %>%
-        pivot_longer(
-          cols      = -sample_size,
-          names_to  = "test_sd",
-          values_to = "sd_time"
-        ) %>%
-        mutate(test = gsub("_sd", "_mean", test_sd)) %>%
-        select(-test_sd),
-      by = c("sample_size", "test")
-    ) %>%
-    # Clean up test labels
-    mutate(
-      test = recode(test,
-                    "perm_mean"  = "Metric Perm",
-                    "asymp_mean" = "Metric Asymp",
-                    "wass_mean"  = "Wass (Boot+Perm)",
-                    "wass2_mean" = "Wass (Perm)"
-      ),
-      sample_size = factor(sample_size)
-    )
+  # Means
+  select(
+    sample_size,
+    perm_mean,
+    asymp_mean,
+    wass_lapjv_mean,
+    wass_lapjv_single_mean,
+    wass_hung_mean,
+    wass_hung_single_mean
+  ) %>%
+  pivot_longer(
+    cols      = -sample_size,
+    names_to  = "test",
+    values_to = "mean_time"
+  ) %>%
+  
+  # SDs
+  left_join(
+    results %>%
+      select(
+        sample_size,
+        perm_sd,
+        asymp_sd,
+        wass_lapjv_sd,
+        wass_lapjv_single_sd,
+        wass_hung_sd,
+        wass_hung_single_sd
+      ) %>%
+      pivot_longer(
+        cols      = -sample_size,
+        names_to  = "test_sd",
+        values_to = "sd_time"
+      ) %>%
+      mutate(
+        test = gsub("_sd", "_mean", test_sd)
+      ) %>%
+      select(-test_sd),
+    
+    by = c("sample_size", "test")
+  ) %>%
+  
+  # Clean up test labels
+  mutate(
+    test = recode(
+      test,
+      "perm_mean"              = "Metric Perm",
+      "asymp_mean"             = "Metric Asymp",
+      "wass_lapjv_mean"        = "Wass LAPJV (Boot+Perm)",
+      "wass_lapjv_single_mean" = "Wass LAPJV (Perm)",
+      "wass_hung_mean"         = "Wass Hungarian (Boot+Perm)",
+      "wass_hung_single_mean"  = "Wass Hungarian (Perm)"
+    ),
+    sample_size = factor(sample_size)
+  )
 
 
-
+# Normalize timing within each method
 results_long <- results_long %>%
   group_by(test) %>%
-  mutate(time_norm = mean_time / max(mean_time))
-  
+  mutate(
+    time_norm = mean_time / max(mean_time)
+  ) %>%
+  ungroup()
+
+
+##### Visualization ##########
+
+method_colors <- c(
+  "Metric Perm"              = "#306FAC",
+  "Metric Asymp"             = "#C56526",
+  "Wass LAPJV (Boot+Perm)"    = "#DCA237",
+  "Wass LAPJV (Perm)"         = "#6EB2E4",
+  "Wass Hungarian (Boot+Perm)" = "#4E9F6D",
+  "Wass Hungarian (Perm)"      = "#8E6BBE"
+)
+
+
 # ─────────────────────────────────────────────────────────────
-# Plot 1: Line plot with error bands (mean ± SD) 
+# Plot 1: Line plot with error bands (mean ± SD)
 # ─────────────────────────────────────────────────────────────
+
+p1 <- ggplot(
+  results_long,
+  aes(
+    x    = as.numeric(as.character(sample_size)),
+    y    = mean_time,
+    col  = test,
+    fill = test
+  )
+) +
+  geom_ribbon(
+    aes(
+      ymin = mean_time - sd_time,
+      ymax = mean_time + sd_time
+    ),
+    alpha = 0.15,
+    colour = NA
+  ) +
+  geom_line(linewidth = 1.5) +
+  geom_point(size = 2.5) +
   
-p1 <- ggplot(results_long, 
-               aes(x    = as.numeric(as.character(sample_size)),
-                   y    = mean_time,
-                   col  = test,
-                   fill = test)) +
-    geom_ribbon(aes(ymin = mean_time - sd_time,
-                    ymax = mean_time + sd_time),
-                alpha = 0.15, colour = NA) +
-    geom_line(linewidth = 0.9) +
-    geom_point(size = 2.5) +
-    scale_x_continuous(breaks = c(20, 50, 100, 200)) +
-    scale_color_brewer(palette = "Set1") +
-    scale_fill_brewer(palette  = "Set1") +
-    labs(
-      title    = "",
-      x        = "Sample Size (n)",
-      y        = "Time (seconds)",
-      col      = "Test",
-      fill     = "Test"
-    ) +
-    theme_bw(base_size = 13) +
-    theme(
-      legend.position  = c(0.3,0.8),
-      legend.background = element_rect(fill="white"),,
-      legend.key.size = unit(0.35, "cm"),
-      legend.text = element_text(size = 8),
-      legend.title = element_text(size = 8),
-      legend.box.background = element_rect(color="black"),
-      plot.title = element_text(face = "bold"),
-      panel.grid.minor = element_blank()
-    )
+  scale_x_continuous(
+    breaks = c(20, 50, 100, 200)
+  ) +
   
+  scale_color_manual(values  = method_colors) +
+  scale_fill_manual(values  = method_colors) +
+  
+  labs(
+    title = "",
+    x = "Sample Size (n)",
+    y = "Time (seconds)",
+    col = "Test",
+    fill = "Test"
+  ) +
+  
+  theme_bw(base_size = 20) +
+  theme(
+    legend.position = c(0.25, 0.75),
+    legend.background = element_rect(fill = "white"),
+    legend.key.size = unit(0.9, "cm"),
+    legend.text = element_text(size = 16),
+    legend.title = element_text(size = 17),
+    legend.box.background = element_rect(color = "black"),
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
+
+
+
 # ─────────────────────────────────────────────────────────────
 # Plot 2: Faceted bar plot with error bars (mean ± SD)
 # ─────────────────────────────────────────────────────────────
+
+p2 <- ggplot(
+  results_long,
+  aes(
+    x = sample_size,
+    y = mean_time,
+    fill = test
+  )
+) +
+  geom_col(
+    position = "dodge",
+    width = 0.7
+  ) +
   
-p2 <- ggplot(results_long,
-               aes(x    = sample_size,
-                   y    = mean_time,
-                   fill = test)) +
-    geom_col(position = "dodge", width = 0.7) +
-    geom_errorbar(aes(ymin = mean_time - sd_time,
-                      ymax = mean_time + sd_time),
-                  position = position_dodge(0.7),
-                  width    = 0.25,
-                  linewidth = 0.6) +
-    facet_wrap(~ test, scales = "free_y") +
-    scale_fill_brewer(palette = "Set1") +
-    labs(
-      title    = "",
-      x        = "Sample Size (n)",
-      y        = "Time (seconds)",
-      fill     = "Test"
-    ) +
-    theme_bw(base_size = 13) +
-    theme(
-      legend.position  = "none",
-      plot.title       = element_text(face = "bold"),
-      panel.grid.minor = element_blank(),
-      strip.background = element_rect(fill = "grey92"),
-      strip.text       = element_text(face = "bold")
-    ) 
+  geom_errorbar(
+    aes(
+      ymin = mean_time - sd_time,
+      ymax = mean_time + sd_time
+    ),
+    position = position_dodge(0.7),
+    width = 0.25,
+    linewidth = 0.6
+  ) +
   
+  facet_wrap(
+    ~ test,
+    scales = "free_y"
+  ) +
+  
+  scale_fill_manual(values = method_colors) +
+  
+  labs(
+    title = "",
+    x = "Sample Size (n)",
+    y = "Time (seconds)",
+    fill = "Test"
+  ) +
+  
+  theme_bw(base_size = 20) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "grey92"),
+    strip.text = element_text(face = "bold", size = 13)
+  )
+
+
 # ─────────────────────────────────────────────────────────────
 # Display plots
 # ─────────────────────────────────────────────────────────────
-  
-  print(p1)
-  print(p2)
-  
-  
+
+print(p1)
+print(p2)
+
+
 library(patchwork)
-  
+
 p <- (p1 | p2) 
 
 
-ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/timing.png", plot = p, width = 8, height = 5, dpi = 300)
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/timing.png",
+       plot = p, width = 21, height = 11, dpi = 1000)
 ggsave("timing_lineplot.png", plot = p1, width = 8, height = 5, dpi = 300)
 ggsave("timing_barplot.png",  plot = p2, width = 9, height = 6, dpi = 300)
+
+
+
+
