@@ -662,7 +662,7 @@ library(dplyr)
 
 results_long <- results %>%
   # Means
-  select(
+  dplyr::select(
     sample_size,
     perm_mean,
     asymp_mean,
@@ -680,7 +680,7 @@ results_long <- results %>%
   # SDs
   left_join(
     results %>%
-      select(
+      dplyr::select(
         sample_size,
         perm_sd,
         asymp_sd,
@@ -697,7 +697,7 @@ results_long <- results %>%
       mutate(
         test = gsub("_sd", "_mean", test_sd)
       ) %>%
-      select(-test_sd),
+      dplyr::select(-test_sd),
     
     by = c("sample_size", "test")
   ) %>%
@@ -756,7 +756,7 @@ p1 <- ggplot(
       ymin = mean_time - sd_time,
       ymax = mean_time + sd_time
     ),
-    alpha = 0.15,
+    alpha = 0.2,
     colour = NA
   ) +
   geom_line(linewidth = 1.5) +
@@ -859,7 +859,6 @@ ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/
        plot = p, width = 21, height = 11, dpi = 1000)
 ggsave("timing_lineplot.png", plot = p1, width = 8, height = 5, dpi = 300)
 ggsave("timing_barplot.png",  plot = p2, width = 9, height = 6, dpi = 300)
-
 
 
 
