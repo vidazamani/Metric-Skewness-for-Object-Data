@@ -1,3 +1,5 @@
+This folder is an R package to compute affine invariante metric between SPD matrices using RCpp.
+
 * Edit the help file skeletons in 'man', possibly combining help files
   for multiple functions.
 * Edit the package 'DESCRIPTION'.
