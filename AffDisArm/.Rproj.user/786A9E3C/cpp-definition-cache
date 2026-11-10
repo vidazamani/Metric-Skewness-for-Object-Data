@@ -1,7 +1,7 @@
 [
     {
         "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDisArm/src/affmet.cpp",
-        "file_last_write": 1794332061.0,
+        "file_last_write": 1794344669.0,
         "definitions": [
             {
                 "usr": "c:@F@inv_sqrt_spd_cpp#&1$@N@arma@S@Mat>#d#",
@@ -9,38 +9,38 @@
                 "parent_name": "",
                 "name": "inv_sqrt_spd_cpp(const arma::mat &)",
                 "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDisArm/src/affmet.cpp",
-                "line": 14,
+                "line": 15,
                 "column": 11,
                 "hidden": false
             },
             {
-                "usr": "c:@F@distance_ai_squared_cpp#&1$@N@arma@S@Mat>#d#S0_#",
+                "usr": "c:@F@distance_ai_alpha_cpp#&1$@N@arma@S@Mat>#d#S0_#d#",
                 "kind": 6,
                 "parent_name": "",
-                "name": "distance_ai_squared_cpp(const arma::mat &, const arma::mat &)",
+                "name": "distance_ai_alpha_cpp(const arma::mat &, const arma::mat &, const double)",
                 "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDisArm/src/affmet.cpp",
-                "line": 38,
+                "line": 44,
                 "column": 8,
                 "hidden": false
             },
             {
-                "usr": "c:@F@affinv_metric_cpp#&1$@N@arma@S@Cube>#d#",
+                "usr": "c:@F@affinv_metric_cpp#&1$@N@arma@S@Cube>#d#d#",
                 "kind": 6,
                 "parent_name": "",
-                "name": "affinv_metric_cpp(const arma::cube &)",
+                "name": "affinv_metric_cpp(const arma::cube &, const double)",
                 "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDisArm/src/affmet.cpp",
-                "line": 75,
-                "column": 16,
+                "line": 86,
+                "column": 15,
                 "hidden": false
             },
             {
-                "usr": "c:@F@affinv_metric_inverse_cpp#&1$@N@arma@S@Cube>#d#",
+                "usr": "c:@F@affinv_metric_inverse_cpp#&1$@N@arma@S@Cube>#d#d#",
                 "kind": 6,
                 "parent_name": "",
-                "name": "affinv_metric_inverse_cpp(const arma::cube &)",
+                "name": "affinv_metric_inverse_cpp(const arma::cube &, const double)",
                 "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDisArm/src/affmet.cpp",
-                "line": 118,
-                "column": 16,
+                "line": 144,
+                "column": 15,
                 "hidden": false
             }
         ],
