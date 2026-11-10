@@ -1,0 +1,76 @@
+[
+    {
+        "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+        "file_last_write": 1794323127.0,
+        "definitions": [
+            {
+                "usr": "c:@F@jacobi_eigen#&$@N@std@N@__1@S@vector>#d#$@N@std@N@__1@S@allocator>#d#S0_#S0_#I#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "jacobi_eigen(std::vector<double> &, std::vector<double> &, std::vector<double> &, int)",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+                "line": 14,
+                "column": 6,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@get_symmetric_matrix#&1$@N@Rcpp@S@Matrix>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "get_symmetric_matrix(const NumericMatrix &)",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+                "line": 111,
+                "column": 21,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@distance_ai_squared_cpp#&1$@N@Rcpp@S@Matrix>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#S0_#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "distance_ai_squared_cpp(const NumericMatrix &, const NumericMatrix &)",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+                "line": 135,
+                "column": 8,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@affinv_metric_cpp#$@N@Rcpp@S@Vector>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "affinv_metric_cpp(NumericVector)",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+                "line": 245,
+                "column": 16,
+                "hidden": false
+            },
+            {
+                "usr": "c:@F@affinv_metric_inverse_cpp#$@N@Rcpp@S@Vector>#VI14#@N@Rcpp@ST>1#T@PreserveStorage#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "affinv_metric_inverse_cpp(NumericVector)",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/affmet.cpp",
+                "line": 300,
+                "column": 16,
+                "hidden": false
+            }
+        ],
+        "hidden": false
+    },
+    {
+        "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/rcpp_hello_world.cpp",
+        "file_last_write": 1794323088.0,
+        "definitions": [
+            {
+                "usr": "c:@F@rcpp_hello_world#",
+                "kind": 6,
+                "parent_name": "",
+                "name": "rcpp_hello_world",
+                "file": "/Users/vizama/Documents/Papers/2nd paper/Codes/AffDis/src/rcpp_hello_world.cpp",
+                "line": 6,
+                "column": 6,
+                "hidden": false
+            }
+        ],
+        "hidden": false
+    }
+]

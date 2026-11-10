@@ -1,0 +1,37 @@
+library(AffDis)
+
+
+# Load necessary libraries
+library(CovTools) 
+library(shapes)
+library(ICtest)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(parallel)
+library(purrr)
+library(Rcpp)
+library(CompQuadForm)
+library(RcppHungarian)
+library(TreeDist)
+
+
+generate_matrices <- function(sample_size,dim,mu,sig) {
+  
+  replicate(sample_size, {
+    
+    U <- rorth(dim)
+    D <- diag(exp(rnorm(dim,mu,sig)))
+    S <- U%*%D%*%t(U)
+    
+    ## if you want to generate corr matrices, then run the code lines below
+    # diagS <- diag(S)
+    # diag(1/sqrt(diagS))%*%S%*%diag(1/sqrt(diagS))
+    
+  })
+  
+}
+mat <- generate_matrices(2,3,1,0)
+
+
+D = affinv_metric_cpp(mat)
