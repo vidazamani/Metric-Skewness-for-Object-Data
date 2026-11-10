@@ -1,3 +1,8 @@
+This AffDisArm folder is actually an R package which contains functions to compute affine invariant metric between SPD matrices 
+This R project is based on RcppAmadillo
+
+
+
 * Edit the help file skeletons in 'man', possibly combining help files
   for multiple functions.
 * Edit the package 'DESCRIPTION'.
