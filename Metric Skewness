@@ -176,7 +176,7 @@ howlong <- endtime - start_time
 data <- data.frame(par_grid,b_all)
 
 ### To just obtain a dataset 
-### which has an average of skewness measre over iterations
+### which has an average of skewness measure over iterations
 data1 <- data.frame(data,avg_skew = apply(data[c(5,6)], 1, mean))
 
 
@@ -185,10 +185,9 @@ data1 <- data.frame(data,avg_skew = apply(data[c(5,6)], 1, mean))
 #################### Visualization ##############################
 
 pdf(file = 
-      "C:/Users/vizama/Documents/2nd paper/pics/skewnessmatrix.pdf",  
+      "/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/skewnessmatrix.pdf",  
     width = 10, # The width of the plot in inches
     height = 6) # The height of the plot in inches
-
 
 # New facet label names for matrix dimension variable
 mtd.labs <- c("n = 50", 'n = 100')
@@ -233,9 +232,71 @@ ggplot()+
   labs(
     x = expression(mu) ,       
     y = "Log of Averaged Skewness",    
-    color = "Smaple Size",
+    color = "Sample Size",
     linetype = expression(sigma)
   )
 
+
+
+ggplot(
+  data4,
+  aes(
+    x = mean,
+    y = log(avg_skew),
+    color = factor(sample_size),
+    linetype = factor(sig),
+    group = interaction(sample_size, sig)
+  )
+) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 0.02) +
+  
+  scale_color_manual(
+    values = c(
+      "#306FAC",
+      "#C56526",
+      "#469C76",
+      "#C07DA5",
+      "#6EB2E4",
+      "#DCA237"
+    )
+  ) +
+  
+  scale_linetype_manual(
+    values = c(
+      "solid",
+      "dotdash",
+      "dotted"
+    )
+  ) +
+  
+  theme_light(base_size = 13) +
+  
+  theme(
+    text = element_text(family = "sans"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10, color = "black"),
+    
+    panel.grid.major = element_line(
+      color = "grey85",
+      linewidth = 0.4
+    ),
+    
+    panel.grid.minor = element_line(
+      color = "grey92",
+      linewidth = 0.3
+    ),
+    
+    legend.position = "bottom",
+    legend.title = element_text(face = "plain"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  labs(
+    x = expression(mu),
+    y = expression(log ("Averaged Metric Skewness")),
+    color = "Sample Size",
+    linetype = expression(sigma) 
+  )
 
 dev.off()
