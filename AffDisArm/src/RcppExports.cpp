@@ -12,26 +12,24 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // affinv_metric_cpp
-NumericMatrix affinv_metric_cpp(const arma::cube& mats, const double alpha);
-RcppExport SEXP _AffDisArm_affinv_metric_cpp(SEXP matsSEXP, SEXP alphaSEXP) {
+NumericMatrix affinv_metric_cpp(const arma::cube& mats);
+RcppExport SEXP _AffDisArm_affinv_metric_cpp(SEXP matsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::cube& >::type mats(matsSEXP);
-    Rcpp::traits::input_parameter< const double >::type alpha(alphaSEXP);
-    rcpp_result_gen = Rcpp::wrap(affinv_metric_cpp(mats, alpha));
+    rcpp_result_gen = Rcpp::wrap(affinv_metric_cpp(mats));
     return rcpp_result_gen;
 END_RCPP
 }
 // affinv_metric_inverse_cpp
-NumericMatrix affinv_metric_inverse_cpp(const arma::cube& mats, const double alpha);
-RcppExport SEXP _AffDisArm_affinv_metric_inverse_cpp(SEXP matsSEXP, SEXP alphaSEXP) {
+NumericMatrix affinv_metric_inverse_cpp(const arma::cube& mats);
+RcppExport SEXP _AffDisArm_affinv_metric_inverse_cpp(SEXP matsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::cube& >::type mats(matsSEXP);
-    Rcpp::traits::input_parameter< const double >::type alpha(alphaSEXP);
-    rcpp_result_gen = Rcpp::wrap(affinv_metric_inverse_cpp(mats, alpha));
+    rcpp_result_gen = Rcpp::wrap(affinv_metric_inverse_cpp(mats));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -80,8 +78,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_AffDisArm_affinv_metric_cpp", (DL_FUNC) &_AffDisArm_affinv_metric_cpp, 2},
-    {"_AffDisArm_affinv_metric_inverse_cpp", (DL_FUNC) &_AffDisArm_affinv_metric_inverse_cpp, 2},
+    {"_AffDisArm_affinv_metric_cpp", (DL_FUNC) &_AffDisArm_affinv_metric_cpp, 1},
+    {"_AffDisArm_affinv_metric_inverse_cpp", (DL_FUNC) &_AffDisArm_affinv_metric_inverse_cpp, 1},
     {"_AffDisArm_rcpparma_hello_world", (DL_FUNC) &_AffDisArm_rcpparma_hello_world, 0},
     {"_AffDisArm_rcpparma_outerproduct", (DL_FUNC) &_AffDisArm_rcpparma_outerproduct, 1},
     {"_AffDisArm_rcpparma_innerproduct", (DL_FUNC) &_AffDisArm_rcpparma_innerproduct, 1},
