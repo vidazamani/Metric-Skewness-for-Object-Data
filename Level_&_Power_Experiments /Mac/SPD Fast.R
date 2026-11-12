@@ -14,7 +14,7 @@ library(TreeDist)
 
 
 #####
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
+#remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
 library(LogDis)
 # ## OR 
 # sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/u2_statistic_rcpp.cpp")
@@ -22,6 +22,8 @@ library(LogDis)
 # ## OR
 # devtools::install('/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis')
 # library(LogDis)
+#devtools::install_github('vidazamani/Metric-Skewness-for-Object-Data/AffDisArm')
+library(AffDisArm)
 #####
 
 
@@ -67,15 +69,15 @@ generate_matrices <- function(sample_size,dim,mu,sig) {
 
 
 # Step 3: Invert all generated matrices
-invert_matrices <- function(matrices) {
-  n <- dim(matrices)[3] # Number of matrices
-  dim <- dim(matrices)[1] # Dimension of each matrix
-  inverted_matrices <- array(0, dim = c(dim, dim, n)) # Create an empty 3D array
-  for (i in 1:n) {
-    inverted_matrices[, , i] <- solve(matrices[, , i]) # Invert each matrix
-  }
-  return(inverted_matrices)
-}
+# invert_matrices <- function(mats) {
+#   n <- dim(mats)[3] # Number of matrices
+#   dim <- dim(mats)[1] # Dimension of each matrix
+#   inverted_matrices <- array(0, dim = c(dim, dim, n)) # Create an empty 3D array
+#   for (i in 1:n) {
+#     inverted_matrices[, , i] <- solve(mats[, , i]) # Invert each matrix
+#   }
+#   return(inverted_matrices)
+# }
 
 # Step 4: Compute average squared distance for inverted matrices
 # average_squared_distances_inverted <- function(matrices) {
@@ -95,15 +97,15 @@ invert_matrices <- function(matrices) {
 # Function to compute skewness
 # --------------------------------------------------------
 
-metric_skew_fun <- function(matrices) {
+metric_skew_fun <- function(mats, metric, Invmetric,gamma) {
   
   # Step 2: Compute average squared distance for original matrices
-  avg_dist_original <- rowMeans(distance_logeuclid_cpp(matrices))
+  avg_dist_original <- rowMeans(metric(mats)^gamma)
   # avg_dist_original <- average_squared_distances(matrices)
   
   
   # Step 3: Compute average squared distance for inverted matrices
-  avg_dist_inverted <- rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
+  avg_dist_inverted <- rowMeans(Invmetric(mats)^gamma)
   # avg_dist_inverted <- average_squared_distances_inverted(matrices)
   
   
@@ -115,32 +117,47 @@ metric_skew_fun <- function(matrices) {
 }
 
 
+# Example
+
+
+# metric  <-  LogDis::distance_logeuclid_cpp
+# Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+
+# metric <- AffDisArm::affinv_metric_cpp
+# Invmetric <- AffDisArm::affinv_metric_inverse_cpp
+
+
+# mats <-  generate_matrices(200,3,3,1)
+# gamma <- 1
+# 
+# 
+# metric_skew_fun(mats,metric, Invmetric,gamma)
 ############ Permutation test ##################################
 
-Perm_test <- function(matrices, iter, regularize){
+Perm_test <- function(mats, metric, Invmetric, gamma, iter, regularize){
   
   
   
   # Compute the observed Metric Skewness
-  T0 <- metric_skew_fun(matrices)
+  T0 <- metric_skew_fun(mats, metric, Invmetric, gamma)
   
-  n <- dim(matrices)[3]
+  n <- dim(mats)[3]
   Tperm <- numeric(iter)
   
   for(b in 1:iter) {
     # random flips: TRUE = invert, FALSE = keep
     flips <- sample(c(TRUE, FALSE), n, replace = TRUE)
-    perm_sample <- array(0, dim = dim(matrices))
+    perm_sample <- array(0, dim = dim(mats))
     for(i in 1:n) {
       if(flips[i]) {
-        A <- matrices[,,i]
+        A <- mats[,,i]
         if(regularize > 0) A <- A + regularize * diag(dim(generate_matrices(sample_size, dim, mu, sig))[1])
         perm_sample[,,i] <- solve(A)
       } else {
-        perm_sample[,,i] <- matrices[,,i]
+        perm_sample[,,i] <- mats[,,i]
       }
     }
-    Tperm[b] <- metric_skew_fun(perm_sample)
+    Tperm[b] <- metric_skew_fun(perm_sample, metric, Invmetric, gamma)
   }
   
   
@@ -153,8 +170,8 @@ Perm_test <- function(matrices, iter, regularize){
   result
 }
 
-matrices <- generate_matrices(5,3,0,1)
-Perm_test(matrices,20,0)
+# mats <- generate_matrices(5,3,0,1)
+# Perm_test(mats, metric, Invmetric, gamma,20,0)
 
 
 
@@ -406,14 +423,14 @@ imhof_cdf <- function(x, weights) {
 
 #### Asymptotic Test
 
-Asymp_metric_skewness_spd <- function(mats) {
+Asymp_metric_skewness_spd <- function(mats, metric, Invmetric) {
   # mats: p x p x n SPD array
   n <- dim(mats)[3]
   if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
   
-  # 1) Log–Euclidean distances (it is actullay Frobenius norm squared)
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  # 1) Log–Euclidean distances 
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   
   # 2) U2 from Rcpp
@@ -457,7 +474,6 @@ Asymp_metric_skewness_spd <- function(mats) {
 
 
 
-
 #################### Wasserstein-2 bootstrap-permutation test for skewness #########
 # Assumes that n is even
 #
@@ -465,14 +481,14 @@ Asymp_metric_skewness_spd <- function(mats) {
 # G = squared distance matrix from original to flipped
 # R = number of bootstrap reps
 # B = number of premutation reps
-wasserstein_test <- function(mats, R, B){
+wasserstein_test <- function(mats, metric, Invmetric, R, B){
   pval_vec <- rep(0, R)
   
   n <- dim(mats)[3]
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   
   # Bootstrap replicates
@@ -516,14 +532,14 @@ wasserstein_test <- function(mats, R, B){
 # Assumes that n is even
 # B = number of permutation reps
 
-wasserstein_test_2 <- function(mats, B){
+wasserstein_test_2 <- function(mats, metric, Invmetric, B){
   
   n <- dim(mats)[3]
   
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   G_corner <- G[1:(n/2), (n/2 + 1):n]
   
@@ -561,7 +577,10 @@ power_fixed_n <- function(
     nrep,
     R,
     B,
-    alpha
+    alpha,
+    metric,
+    Invmetric,
+    gamma
 ) {
   
   
@@ -584,10 +603,10 @@ power_fixed_n <- function(
       
       
       c(
-        Metric_perm  = Perm_test(mats, B,0)$p_value,
-        Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value,
-        Wasserstein1  = wasserstein_test(mats, R, B),
-        Wasserstein2  = wasserstein_test_2(mats, B)
+        Metric_perm  = Perm_test(mats, metric, Invmetric, gamma, B,0)$p_value,
+        Metric_asymp = Asymp_metric_skewness_spd(mats, metric, Invmetric)$p.value,
+        Wasserstein1  = wasserstein_test(mats, metric, Invmetric, R, B),
+        Wasserstein2  = wasserstein_test_2(mats, metric, Invmetric, B)
       )
       
     }, mc.cores = ncores)
@@ -621,6 +640,23 @@ nrep <- 1000
 R <- 100
 B <- 100
 alpha <- 0.05
+metric  <-  LogDis::distance_logeuclid_cpp
+Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+gamma <- 1
+
+
+
+sig_grid <- c(0.05, 0.1, 0.3)
+n_values <- c(20, 50)
+mu <- seq(0,0.06,0.01)
+dim <- 3
+nrep <- 2
+R <- 2
+B <- 2
+alpha <- 0.05
+metric  <-  LogDis::distance_logeuclid_cpp
+Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+gamma <- 1
 
 run_power_all_sigma <- function(sig_grid, n_values){
   
@@ -632,7 +668,7 @@ run_power_all_sigma <- function(sig_grid, n_values){
       
       cat("Running for sigma =", sig, "n =", n, "\n")
       
-      res <- power_fixed_n(n , dim, mu, sig, nrep, R, B, alpha)
+      res <- power_fixed_n(n , dim, mu, sig, nrep, R, B, alpha, metric, Invmetric, gamma)
       
       df <- res |>
         pivot_longer(
@@ -763,17 +799,20 @@ ggplot(
     )
   
   
-  ############# Level evaluation - Simulation across sample sizes to estimate level
+############# Level evaluation - Simulation across sample sizes to estimate level
   
-  ## Mac
-  level_test_parallel <- function(sample_sizes, 
+## Mac
+level_test_parallel <- function(sample_sizes, 
                                   dim, 
                                   mu, 
                                   sig,
                                   nrep,
                                   R,
                                   B, 
-                                  alpha) {
+                                  alpha,
+                                  metric,
+                                  Invmetric,
+                                  gamma) {
     
     
     
@@ -801,10 +840,10 @@ ggplot(
         
         
         c(
-          Metric_perm  = Perm_test(mats, B,0)$p_value,
-          Metric_asymp = Asymp_metric_skewness_spd(mats)$p.value,
-          Wasserstein1  = wasserstein_test(mats, R, B),
-          Wasserstein2  = wasserstein_test_2(mats, B)
+          Metric_perm  = Perm_test(mats, metric, Invmetric, gamma,B,0)$p_value,
+          Metric_asymp = Asymp_metric_skewness_spd(mats, metric, Invmetric)$p.value,
+          Wasserstein1  = wasserstein_test(mats, metric, Invmetric, R, B),
+          Wasserstein2  = wasserstein_test_2(mats, metric, Invmetric, B)
         )
         
       }, mc.cores = ncores)
@@ -845,17 +884,36 @@ ggplot(
   
 set.seed(1111)
   
-  dim  <- 3
-  mu   <- 0
-  sig  <- 0.1
-  alpha <- 0.05
-  sample_sizes <- seq(10,300,20)
+dim  <- 3
+mu   <- 0
+sig  <- 0.1
+alpha <- 0.05
+sample_sizes <- seq(10,300,20)
   
-  nrep <- 1000
-  R <- 50
-  B <- 500
+nrep <- 1000
+R <- 50
+B <- 500
   
-  level_cov <- level_test_parallel(
+metric  <-  LogDis::distance_logeuclid_cpp
+Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+gamma <- 1
+
+
+dim  <- 3
+mu   <- 0
+sig  <- 0.1
+alpha <- 0.05
+sample_sizes <- seq(10,300,20)
+
+nrep <- 2
+R <- 2
+B <- 2
+
+metric  <-  LogDis::distance_logeuclid_cpp
+Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+gamma <- 1
+
+level_cov <- level_test_parallel(
     sample_sizes,
     dim,
     mu, 
@@ -863,7 +921,10 @@ set.seed(1111)
     nrep,
     R,
     B,
-    alpha
+    alpha,
+    metric, 
+    Invmetric,
+    gamma
   )
   
   
@@ -888,8 +949,8 @@ set.seed(1111)
   
   
   df_spd$Test <- factor(df_spd$Test,
-                             levels = c("Metric_perm", "Metric_asym", "Wasserstein1", "Wasserstein2"),
-                             labels = c("Metric (Perm)", "Metric (Asymp)", "Wass (Boot+Perm)", "Wass (Perm)"))
+                        levels = c("Metric_perm", "Metric_asym", "Wasserstein1", "Wasserstein2"),
+                        labels = c("Metric (Perm)", "Metric (Asymp)", "Wass (Boot+Perm)", "Wass (Perm)"))
   
   p2 <- ggplot(df_spd,
                aes(x = n,
