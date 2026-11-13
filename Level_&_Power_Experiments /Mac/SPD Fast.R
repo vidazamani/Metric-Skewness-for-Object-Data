@@ -699,7 +699,6 @@ df_power$Test <- factor(df_power$Test,
 df_power$n <- factor(df_power$n)
 df_power$sigma <- factor(df_power$sigma)
 
-df_without_Asymp <- df_power |> filter(df_power$Test != "Metric (Asymp)")
 
 p <- ggplot(
   df_power,
@@ -740,6 +739,9 @@ p <- ggplot(
     axis.title = element_text(face = "plain"),
     axis.line = element_line(linewidth = 0.5)
   )
+
+
+df_without_Asymp <- df_power |> filter(df_power$Test != "Metric (Asymp)")
 
 
 p_noAsymp <- ggplot(
@@ -996,7 +998,6 @@ df_spd$Test <- factor(df_spd$Test,
                       levels = c("Metric_perm", "Metric_asym", "Wasserstein1", "Wasserstein2"),
                       labels = c("Metric (Perm)", "Metric (Asymp)", "Wass (Boot+Perm)", "Wass (Perm)"))
 
-df_spd_noAsym <- df_spd |> filter(df_spd$Test != "Metric (Asymp)")
 
 p2 <- ggplot(df_spd,
              aes(x = n,
@@ -1029,6 +1030,9 @@ p2 <- ggplot(df_spd,
     axis.title = element_text(face = "plain"),
     axis.line = element_line(linewidth = 0.5)
   )
+
+
+df_spd_noAsym <- df_spd |> filter(df_spd$Test != "Metric (Asymp)")
 
 p2_noAsym <- ggplot(df_spd_noAsym,
              aes(x = n,
@@ -1070,259 +1074,3 @@ ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/
        plot = p2_noAsym, width = 10, height = 7)
 
   
-# ─────────────────────────────────────────────────────────────
-# Timing Study
-# ─────────────────────────────────────────────────────────────
-
-# Fixed parameters
-dim       <- 3       # matrix dimension
-mu        <- 0       # mean 
-sig       <- 1       # Sigma
-n_rep     <- 50      # number of repetitions per sample size
-iter_perm <- 199     # iterations for Perm_test
-R_wass    <- 10      # bootstrap replicates for wasserstein_test
-B_wass    <- 199     # permutation replicates for wasserstein tests
-reg       <- 0       # regularization parameter for Perm_test
-
-sample_sizes <- c(20, 50, 100, 200)
-
-metric  <-  LogDis::distance_logeuclid_cpp
-Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
-gamma <- 1
-  
-# Storage: one row per sample size, columns = mean & SD for each test
-results <- data.frame(
-  sample_size          = sample_sizes,
-  perm_mean            = NA_real_,
-  perm_sd              = NA_real_,
-  asymp_mean           = NA_real_,
-  asymp_sd             = NA_real_,
-  wass_mean            = NA_real_,
-  wass_sd              = NA_real_,
-  wass2_mean           = NA_real_,
-  wass2_sd             = NA_real_
-)
-  
-# ─────────────────────────────────────────────────────────────
-# Main timing loop
-# ─────────────────────────────────────────────────────────────
-
-for (s in seq_along(sample_sizes)) {
-  
-  n <- sample_sizes[s]
-  cat(sprintf("\n── Sample size: %d ──\n", n))
-  
-  # Pre-generate all replicate datasets to ensure fair comparison
-  datasets <- lapply(1:n_rep, function(x) generate_matrices(n, dim, mu, sig))
-  
-  # ── 1. Perm_test ──────────────────────────────────────────
-  cat("  Running Perm_test...\n")
-  t_perm <- numeric(n_rep)
-  for (r in 1:n_rep) {
-    t_perm[r] <- system.time(
-      Perm_test(datasets[[r]], metric, Invmetric, gamma, iter = iter_perm, regularize = reg)
-    )["elapsed"]
-  }
-  
-  # ── 2. Asymp_metric_skewness_spd ──────────────────────────
-  cat("  Running Asymp_metric_skewness_spd...\n")
-  t_asymp <- numeric(n_rep)
-  for (r in 1:n_rep) {
-    t_asymp[r] <- system.time(
-      Asymp_metric_skewness_spd(datasets[[r]], metric, Invmetric)
-    )["elapsed"]
-  }
-  
-  # ── 3. wasserstein_test ───────────────────────────────────
-  cat("  Running wasserstein_test...\n")
-  t_wass <- numeric(n_rep)
-  for (r in 1:n_rep) {
-    t_wass[r] <- system.time(
-      wasserstein_test(datasets[[r]], metric, Invmetric, R = R_wass, B = B_wass)
-    )["elapsed"]
-  }
-  
-  # ── 4. wasserstein_test_2 ─────────────────────────────────
-  cat("  Running wasserstein_test_2...\n")
-  t_wass2 <- numeric(n_rep)
-  for (r in 1:n_rep) {
-    t_wass2[r] <- system.time(
-      wasserstein_test_2(datasets[[r]], metric, Invmetric, B = B_wass)
-    )["elapsed"]
-  }
-  
-  # ── Store results ─────────────────────────────────────────
-  results[s, "perm_mean"]  <- mean(t_perm);   results[s, "perm_sd"]  <- sd(t_perm)
-  results[s, "asymp_mean"] <- mean(t_asymp);  results[s, "asymp_sd"] <- sd(t_asymp)
-  results[s, "wass_mean"]  <- mean(t_wass);   results[s, "wass_sd"]  <- sd(t_wass)
-  results[s, "wass2_mean"] <- mean(t_wass2);  results[s, "wass2_sd"] <- sd(t_wass2)
-  
-}
-
-# ─────────────────────────────────────────────────────────────
-# Print summary table
-# ─────────────────────────────────────────────────────────────
-
-cat("\n\n══════════════════════════════════════════════════════════════\n")
-cat("Timing Study Results (seconds) — averaged over", n_rep, "replications\n")
-cat("══════════════════════════════════════════════════════════════\n\n")
-
-print(
-  data.frame(
-    n             = results$sample_size,
-    Perm          = sprintf("%.4f (%.4f)", results$perm_mean,  results$perm_sd),
-    Asymp         = sprintf("%.4f (%.4f)", results$asymp_mean, results$asymp_sd),
-    Wasserstein   = sprintf("%.4f (%.4f)", results$wass_mean,  results$wass_sd),
-    Wasserstein_2 = sprintf("%.4f (%.4f)", results$wass2_mean, results$wass2_sd)
-  ),
-  row.names = FALSE
-)
-
-  
-library(ggplot2)
-library(tidyr)
-library(dplyr)
-
-# ─────────────────────────────────────────────────────────────
-# Reshape results into long format for ggplot2
-# ─────────────────────────────────────────────────────────────
-
-results_long <- results %>%
-  # Means
-  select(sample_size, perm_mean, asymp_mean, wass_mean, wass2_mean) %>%
-  pivot_longer(
-    cols      = -sample_size,
-    names_to  = "test",
-    values_to = "mean_time"
-  ) %>%
-  # SDs
-  left_join(
-    results %>%
-      select(sample_size, perm_sd, asymp_sd, wass_sd, wass2_sd) %>%
-      pivot_longer(
-        cols      = -sample_size,
-        names_to  = "test_sd",
-        values_to = "sd_time"
-      ) %>%
-      mutate(test = gsub("_sd", "_mean", test_sd)) %>%
-      select(-test_sd),
-    by = c("sample_size", "test")
-  ) %>%
-  # Clean up test labels
-  mutate(
-    test = recode(test,
-                  "perm_mean"  = "Metric Perm",
-                  "asymp_mean" = "Metric Asymp",
-                  "wass_mean"  = "Wass (Boot+Perm)",
-                  "wass2_mean" = "Wass (Perm)"
-    ),
-    sample_size = factor(sample_size)
-  )
-
-# ─────────────────────────────────────────────────────────────
-# Plot 1: Line plot with error bands (mean ± SD) 
-# ─────────────────────────────────────────────────────────────
-
-p1 <- ggplot(results_long, 
-             aes(x    = as.numeric(as.character(sample_size)),
-                 y    = mean_time,
-                 col  = test,
-                 fill = test)) +
-  geom_ribbon(aes(ymin = mean_time - sd_time,
-                  ymax = mean_time + sd_time),
-              alpha = 0.15, colour = NA) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 2.5) +
-  scale_x_continuous(breaks = c(20, 50, 100, 200)) +
-  scale_color_brewer(palette = "Set1") +
-  scale_fill_brewer(palette  = "Set1") +
-  labs(
-    title    = "Timing Study: Computation Time by Sample Size",
-    subtitle = sprintf("Averaged over %d replications (± 1 SD shaded)", n_rep),
-    x        = "Sample Size (n)",
-    y        = "Elapsed Time (seconds)",
-    col      = "Test",
-    fill     = "Test"
-  ) +
-  theme_bw(base_size = 13) +
-  theme(
-    legend.position  = "bottom",
-    plot.title       = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-results_long_noAsym <- results_long |> filter(results_long$test != "Metric Asymp")
-
-p1_noAsym <- ggplot(results_long_noAsym, 
-             aes(x    = as.numeric(as.character(sample_size)),
-                 y    = mean_time,
-                 col  = test,
-                 fill = test)) +
-  geom_ribbon(aes(ymin = mean_time - sd_time,
-                  ymax = mean_time + sd_time),
-              alpha = 0.15, colour = NA) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 2.5) +
-  scale_x_continuous(breaks = c(20, 50, 100, 200)) +
-  scale_color_brewer(palette = "Set1") +
-  scale_fill_brewer(palette  = "Set1") +
-  labs(
-    title    = "Timing Study: Computation Time by Sample Size",
-    subtitle = sprintf("Averaged over %d replications (± 1 SD shaded)", n_rep),
-    x        = "Sample Size (n)",
-    y        = "Elapsed Time (seconds)",
-    col      = "Test",
-    fill     = "Test"
-  ) +
-  theme_bw(base_size = 13) +
-  theme(
-    legend.position  = "bottom",
-    plot.title       = element_text(face = "bold"),
-    panel.grid.minor = element_blank()
-  )
-
-  # ─────────────────────────────────────────────────────────────
-  # Plot 2: Faceted bar plot with error bars (mean ± SD)
-  # ─────────────────────────────────────────────────────────────
-  
-  p2 <- ggplot(results_long,
-               aes(x    = sample_size,
-                   y    = mean_time,
-                   fill = test)) +
-    geom_col(position = "dodge", width = 0.7) +
-    geom_errorbar(aes(ymin = mean_time - sd_time,
-                      ymax = mean_time + sd_time),
-                  position = position_dodge(0.7),
-                  width    = 0.25,
-                  linewidth = 0.6) +
-    facet_wrap(~ test, scales = "free_y") +
-    scale_fill_brewer(palette = "Set1") +
-    labs(
-      title    = "Timing Study: Computation Time by Sample Size",
-      subtitle = sprintf("Averaged over %d replications (error bars = ± 1 SD)", n_rep),
-      x        = "Sample Size (n)",
-      y        = "Elapsed Time (seconds)",
-      fill     = "Test"
-    ) +
-    theme_bw(base_size = 13) +
-    theme(
-      legend.position  = "none",
-      plot.title       = element_text(face = "bold"),
-      panel.grid.minor = element_blank(),
-      strip.background = element_rect(fill = "grey92"),
-      strip.text       = element_text(face = "bold")
-    )
-  
-  # ─────────────────────────────────────────────────────────────
-  # Display plots
-  # ─────────────────────────────────────────────────────────────
-  
-  print(p1)
-  print(p2)
-  
-  # ─────────────────────────────────────────────────────────────
-  # Optionally save plots
-  # ─────────────────────────────────────────────────────────────
-  
-  ggsave("timing_lineplot.png", plot = p1, width = 8, height = 5, dpi = 300)
-  ggsave("timing_barplot.png",  plot = p2, width = 9, height = 6, dpi = 300)
