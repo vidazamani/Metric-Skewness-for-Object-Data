@@ -21,6 +21,8 @@ library(LogDis)
 # ## OR
 # devtools::install('/Users/vizama/Documents/Papers/2nd paper/Codes/LogDis')
 # library(LogDis)
+#devtools::install_github('vidazamani/Metric-Skewness-for-Object-Data/AffDisArm')
+library(AffDisArm)
 #####
 
 
@@ -45,35 +47,19 @@ generate_matrices <- function(sample_size,dim,mu,sig) {
 
 
 
-
-
-
-
-# Step 3: Invert all generated matrices
-invert_matrices <- function(matrices) {
-  n <- dim(matrices)[3] # Number of matrices
-  dim <- dim(matrices)[1] # Dimension of each matrix
-  inverted_matrices <- array(0, dim = c(dim, dim, n)) # Create an empty 3D array
-  for (i in 1:n) {
-    inverted_matrices[, , i] <- solve(matrices[, , i]) # Invert each matrix
-  }
-  return(inverted_matrices)
-}
-
-
 # --------------------------------------------------------
 # Function to compute skewness
 # --------------------------------------------------------
 
-metric_skew_fun <- function(matrices) {
+metric_skew_fun <- function(mats, metric, Invmetric, gamma) {
   
   # Step 2: Compute average squared distance for original matrices
-  avg_dist_original <- rowMeans(distance_logeuclid_cpp(matrices))
+  avg_dist_original <- rowMeans(metric(mats)^gamma)
   # avg_dist_original <- average_squared_distances(matrices)
   
   
   # Step 3: Compute average squared distance for inverted matrices
-  avg_dist_inverted <- rowMeans(distance_to_inverse_logeuclid_cpp(matrices))
+  avg_dist_inverted <- rowMeans(Invmetric(mats)^gamma)
   # avg_dist_inverted <- average_squared_distances_inverted(matrices)
   
   
@@ -84,33 +70,32 @@ metric_skew_fun <- function(matrices) {
   return(Metric_skewness = final_avg_distance)
 }
 
-
 ############ Permutation test ##################################
 
-Perm_test <- function(matrices, iter, regularize){
+Perm_test <- function(mats, metric, Invmetric, gamma, iter, regularize){
   
   
   
   # Compute the observed Metric Skewness
-  T0 <- metric_skew_fun(matrices)
+  T0 <- metric_skew_fun(mats, metric, Invmetric, gamma)
   
-  n <- dim(matrices)[3]
+  n <- dim(mats)[3]
   Tperm <- numeric(iter)
   
   for(b in 1:iter) {
     # random flips: TRUE = invert, FALSE = keep
     flips <- sample(c(TRUE, FALSE), n, replace = TRUE)
-    perm_sample <- array(0, dim = dim(matrices))
+    perm_sample <- array(0, dim = dim(mats))
     for(i in 1:n) {
       if(flips[i]) {
-        A <- matrices[,,i]
+        A <- mats[,,i]
         if(regularize > 0) A <- A + regularize * diag(dim(generate_matrices(sample_size, dim, mu, sig))[1])
         perm_sample[,,i] <- solve(A)
       } else {
-        perm_sample[,,i] <- matrices[,,i]
+        perm_sample[,,i] <- mats[,,i]
       }
     }
-    Tperm[b] <- metric_skew_fun(perm_sample)
+    Tperm[b] <- metric_skew_fun(perm_sample, metric, Invmetric, gamma)
   }
   
   
@@ -122,10 +107,6 @@ Perm_test <- function(matrices, iter, regularize){
   names(result) <- c("observed statistic","p_value", "permutation stats")
   result
 }
-
-matrices <- generate_matrices(5,3,0,1)
-Perm_test(matrices,20,0)
-
 
 
 
@@ -260,14 +241,14 @@ imhof_cdf <- function(x, weights) {
 
 #### Asymptotic Test
 
-Asymp_metric_skewness_spd <- function(mats) {
+Asymp_metric_skewness_spd <- function(mats, metric, Invmetric) {
   # mats: p x p x n SPD array
   n <- dim(mats)[3]
   if (n < 3) return(list(statistic = NA_real_, p.value = NA_real_))
   
-  # 1) Log–Euclidean distances (it is actullay Frobenius norm squared)
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  # 1) Log–Euclidean distances 
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   
   # 2) U2 from Rcpp
@@ -319,14 +300,14 @@ Asymp_metric_skewness_spd <- function(mats) {
 # G = squared distance matrix from original to flipped
 # R = number of bootstrap reps
 # B = number of premutation reps
-wasserstein_test_lapjv <- function(mats, R, B){
+wasserstein_test_lapjv <- function(mats, metric, Invmetric, R, B){
   pval_vec <- rep(0, R)
   
   n <- dim(mats)[3]
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   
   # Bootstrap replicates
@@ -370,14 +351,14 @@ wasserstein_test_lapjv <- function(mats, R, B){
 # Assumes that n is even
 # B = number of permutation reps
 
-wasserstein_test_lapjv_single <- function(mats, B){
+wasserstein_test_lapjv_single <- function(mats, metric, Invmetric, B){
   
   n <- dim(mats)[3]
   
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   G_corner <- G[1:(n/2), (n/2 + 1):n]
   
@@ -413,14 +394,14 @@ wasserstein_test_lapjv_single <- function(mats, B){
 # G = squared distance matrix from original to flipped
 # R = number of bootstrap reps
 # B = number of premutation reps
-wasserstein_test_hung <- function(mats, R, B){
+wasserstein_test_hung <- function(mats, metric, Invmetric, R, B){
   pval_vec <- rep(0, R)
   
   n <- dim(mats)[3]
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   
   # Bootstrap replicates
@@ -460,14 +441,14 @@ wasserstein_test_hung <- function(mats, R, B){
 # Assumes that n is even
 # B = number of permutation reps
 
-wasserstein_test_hung_single <- function(mats, B){
+wasserstein_test_hung_single <- function(mats, metric, Invmetric, B){
   
   n <- dim(mats)[3]
   
   
   # Distance matrices
-  D <- distance_logeuclid_cpp(mats)
-  G <- distance_to_inverse_logeuclid_cpp(mats)
+  D <- metric(mats)
+  G <- Invmetric(mats)
   
   G_corner <- G[1:(n/2), (n/2 + 1):n]
   
@@ -513,6 +494,11 @@ reg       <- 0       # regularization parameter for Perm_test
 
 sample_sizes <- c(20, 50, 100, 200)
 
+
+metric  <-  LogDis::distance_logeuclid_cpp
+Invmetric <- LogDis::distance_to_inverse_logeuclid_cpp
+gamma <- 1
+
 # Storage: one row per sample size, columns = mean & SD for each test
 results <- data.frame(
   sample_size          = sample_sizes,
@@ -547,7 +533,7 @@ for (s in seq_along(sample_sizes)) {
   t_perm <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_perm[r] <- system.time(
-      Perm_test(datasets[[r]], iter = iter_perm, regularize = reg)
+      Perm_test(datasets[[r]], metric, Invmetric, gamma, iter = iter_perm, regularize = reg)
     )["elapsed"]
   }
   
@@ -556,7 +542,7 @@ for (s in seq_along(sample_sizes)) {
   t_asymp <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_asymp[r] <- system.time(
-      Asymp_metric_skewness_spd(datasets[[r]])
+      Asymp_metric_skewness_spd(datasets[[r]], metric, Invmetric)
     )["elapsed"]
   }
   
@@ -565,7 +551,7 @@ for (s in seq_along(sample_sizes)) {
   t_wass_lapjv <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_wass_lapjv[r] <- system.time(
-      wasserstein_test_lapjv(datasets[[r]], R = R_wass, B = B_wass)
+      wasserstein_test_lapjv(datasets[[r]], metric, Invmetric, R = R_wass, B = B_wass)
     )["elapsed"]
   }
   
@@ -574,7 +560,7 @@ for (s in seq_along(sample_sizes)) {
   t_wass_lapjv_single <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_wass_lapjv_single[r] <- system.time(
-      wasserstein_test_lapjv_single(datasets[[r]], B = B_wass)
+      wasserstein_test_lapjv_single(datasets[[r]], metric, Invmetric, B = B_wass)
     )["elapsed"]
   }
   
@@ -583,7 +569,7 @@ for (s in seq_along(sample_sizes)) {
   t_wass_hung <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_wass_hung[r] <- system.time(
-      wasserstein_test_hung(datasets[[r]], R = R_wass, B = B_wass)
+      wasserstein_test_hung(datasets[[r]], metric, Invmetric, R = R_wass, B = B_wass)
     )["elapsed"]
   }
   
@@ -592,7 +578,7 @@ for (s in seq_along(sample_sizes)) {
   t_wass_hung_single <- numeric(n_rep)
   for (r in 1:n_rep) {
     t_wass_hung_single[r] <- system.time(
-      wasserstein_test_hung_single(datasets[[r]], B = B_wass)
+      wasserstein_test_hung_single(datasets[[r]], metric, Invmetric, B = B_wass)
     )["elapsed"]
   }
   
@@ -789,7 +775,54 @@ p1 <- ggplot(
     panel.grid.minor = element_blank()
   )
 
+results_long_noAsym <- results_long |> filter(results_long$test != "Metric Asymp")
 
+p1_noAsym <- ggplot(
+  results_long_noAsym,
+  aes(
+    x    = as.numeric(as.character(sample_size)),
+    y    = mean_time,
+    col  = test,
+    fill = test
+  )
+) +
+  geom_ribbon(
+    aes(
+      ymin = mean_time - sd_time,
+      ymax = mean_time + sd_time
+    ),
+    alpha = 0.4,
+    colour = NA
+  ) +
+  geom_line(linewidth = 1.6) +
+  geom_point(size = 2.5) +
+  
+  scale_x_continuous(
+    breaks = c(20, 50, 100, 200)
+  ) +
+  
+  scale_color_manual(values  = method_colors) +
+  scale_fill_manual(values  = method_colors) +
+  
+  labs(
+    title = "",
+    x = "Sample Size (n)",
+    y = "Time (seconds)",
+    col = "Test",
+    fill = "Test"
+  ) +
+  
+  theme_bw(base_size = 25) +
+  theme(
+    legend.position = c(0.37, 0.8),
+    legend.background = element_rect(fill = "white"),
+    legend.key.size = unit(1, "cm"),
+    legend.text = element_text(face = "bold", size = 16),
+    legend.title = element_text(face = "bold",size = 16),
+    legend.box.background = element_rect(color = "black"),
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank()
+  )
 
 # ─────────────────────────────────────────────────────────────
 # Plot 2: Faceted bar plot with error bars (mean ± SD)
@@ -842,6 +875,77 @@ p2 <- ggplot(
   )
 
 
+p2_noAsymp <- ggplot(
+  results_long_noAsym,
+  aes(
+    x = sample_size,
+    y = mean_time,
+    fill = test
+  )
+) +
+  geom_col(
+    position = "dodge",
+    width = 0.7
+  ) +
+  
+  geom_errorbar(
+    aes(
+      ymin = mean_time - sd_time,
+      ymax = mean_time + sd_time
+    ),
+    position = position_dodge(0.7),
+    width = 0.25,
+    linewidth = 0.6
+  ) +
+  
+  facet_wrap(
+    ~ test,
+    scales = "free_y"
+  ) +
+  
+  scale_fill_manual(values = method_colors) +
+  
+  labs(
+    title = "",
+    x = "Sample Size (n)",
+    y = "Time (seconds)",
+    fill = "Test"
+  ) +
+  
+  theme_bw(base_size = 22) +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(face = "bold"),
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold", size = 26)
+  )
+
+
+
+############# A good Visualization when we don't have Asymptotic
+
+
+library(patchwork)
+library(dplyr)
+
+# Extract the five individual panels from p2
+test_names <- unique(results_long_noAsym$test)
+
+p2_panels <- lapply(test_names, function(z) {
+  p2_noAsymp + filter(results_long_noAsym, test == z)
+})
+
+# Combine the five panels with p1_noAsym
+final_plot <- wrap_plots(
+  c(p2_panels, list(p1_noAsym)),
+  ncol = 3
+)
+
+# Display
+noAsym <- final_plot
+
+
 # ─────────────────────────────────────────────────────────────
 # Display plots
 # ─────────────────────────────────────────────────────────────
@@ -850,15 +954,15 @@ print(p1)
 print(p2)
 
 
-library(patchwork)
 
 p <- (p1 | p2) 
+
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/timing_V2.png",
+       plot = noAsym, width = 21, height = 20, dpi = 1000)
 
 
 ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/matrix/timing.png",
        plot = p, width = 21, height = 11, dpi = 1000)
 ggsave("timing_lineplot.png", plot = p1, width = 8, height = 5, dpi = 300)
 ggsave("timing_barplot.png",  plot = p2, width = 9, height = 6, dpi = 300)
-
-
 
