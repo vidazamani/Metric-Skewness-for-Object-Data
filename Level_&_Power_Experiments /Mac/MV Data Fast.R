@@ -13,8 +13,8 @@ library(CompQuadForm)
 library(RcppHungarian)
 
 #####
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
-remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/mvdistmetricskew')
+# remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/LogDis-R-Package')
+# remotes::install_github('vidazamani/Metric-Skewness-for-Object-Data/mvdistmetricskew')
 library(LogDis)
 library(mvdistmetricskew)
 # ## OR 
@@ -27,9 +27,53 @@ library(mvdistmetricskew)
 #sourceCpp("/Users/vizama/Documents/Papers/2nd paper/Codes/mvdis.cpp")
 
 # --------------------------------------------------------
-# Function to compute h-hat(p) (Metric skewness)
+# Function to compute Metric skewness in Euclidean Space
 # --------------------------------------------------------
-metric_skew <- function(X) {
+
+metric_skew <- function(X, gamma) {
+  
+  X <- as.matrix(X)
+  
+  n <- nrow(X)
+  
+  if (!is.numeric(gamma) || length(gamma) != 1 ||
+      !is.finite(gamma) || gamma <= 0) {
+    stop("gamma must be a positive finite number.")
+  }
+  
+  # Ordinary distances: ||x_j - x_i||^gamma
+  D <- as.matrix(dist(X, method = "euclidean"))^gamma
+  
+  # Reflected distances: ||x_j + x_i||^gamma
+  Dflip <- matrix(0, n, n)
+  
+  for (j in 1:n) {
+    
+    diff_flip <- sweep(X, 2, X[j, ], "+")
+    
+    Dflip[j, ] <- rowSums(diff_flip^2)^(gamma / 2)
+  }
+  
+  # Numerator
+  m_diff <- rowMeans(D - Dflip)
+  
+  numerator <- mean(m_diff^2)
+  
+  # Denominator
+  m_original <- rowMeans(D)
+  
+  denominator <- mean(m_original^2)
+  
+  if (denominator == 0) {
+    stop("Denominator is zero.")
+  }
+  
+  numerator / denominator
+}
+
+#### Metric skewness when gamma = 2 in Euclidean space
+
+metric_skew_2 <- function(X) {
   X <- as.matrix(X)
   n <- nrow(X)
   M <- ncol(X)
@@ -55,6 +99,9 @@ metric_skew <- function(X) {
   ## ---------- h-hat(p) ----------
   numerator / denominator
 }
+
+
+
 
 
 
@@ -84,10 +131,11 @@ mardia_skewness <- function(X) {
 set.seed(1)
 X <- matrix(rnorm(100 * 3), nrow = 100, ncol = 3)
 
-metric_skew(X)
+a <- metric_skew(X,1)
+b <- metric_skew_2(X)
 
 
-
+all.equal(a,b)
 
 # Example: multivariate normal 
 
@@ -100,7 +148,7 @@ gen_mvn <- function(n, p) {
 }
 
 
-metric_skew(gen_mvn(n,p))
+metric_skew(gen_mvn(n,p), gamma = 2)
 
 # Example: skewed data
 
@@ -126,7 +174,7 @@ gen_azzalini <- function(n, p, alpha) {
 
 
 
-metric_skew(gen_azzalini(n,p,alpha))
+metric_skew(gen_azzalini(n,p,alpha), gamma = 2)
 
 
 # --------------------------------------------------------
@@ -179,7 +227,7 @@ gen_sdb_sym <- function(n, p, Lambda) {
 }
 
 
-metric_skew(gen_sdb_sym(n,p,Lambda))
+metric_skew(gen_sdb_sym(n,p,Lambda), gamma = 3)
 
 
 
@@ -188,19 +236,19 @@ metric_skew(gen_sdb_sym(n,p,Lambda))
 # --------------------------------------------------------
 # Permutation test for h-hat(p) (Metric Skewness) 
 # --------------------------------------------------------
-perm_test_metric <- function(X, B) {
+perm_test_metric <- function(X, gamma, B) {
   
   X <- as.matrix(X)
   n <- nrow(X)
   
   # observed statistic
-  t_obs <- metric_skew(X)
+  t_obs <- metric_skew(X, gamma)
   
   # permutation distribution (row-wise sign flipping)
   t_perm <- replicate(B, {
     signs <- sample(c(-1, 1), n, replace = TRUE)
     X_perm <- X * signs
-    metric_skew(X_perm)
+    metric_skew(X_perm, gamma)
   })
   
   # two-sided p-value
@@ -598,7 +646,8 @@ power_fixed_n <- function(
     nrep,
     R,
     B,
-    alpha
+    alpha,
+    gamma
 ) {
   
   
@@ -627,7 +676,7 @@ power_fixed_n <- function(
       
       
       c(
-        Metric_perm  = perm_test_metric(X, B),
+        Metric_perm  = perm_test_metric(X, gamma, B),
         Metric_asymp = Asymp_metric_test(X)$p.value,
         Mardia_perm  = perm_test_mardia(X, B),
         Mardia_asymp = asymp_pvalue_mardia(X),
@@ -667,9 +716,9 @@ alpha_grid <- list(
 
 start <- Sys.time()
 
-res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , R = 50, B = 500, 0.05)
+res_n20  <- power_fixed_n(n = 20, alpha_grid = alpha_grid, nrep = 1000 , R = 50, B = 500, 0.05, gamma = 1)
 
-res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , R = 50, B = 500, 0.05)
+res_n200 <- power_fixed_n(n = 200, alpha_grid = alpha_grid, nrep = 1000 , R = 50, B = 500, 0.05, gamma = 1)
 
 
 end <- Sys.time()
@@ -774,6 +823,73 @@ Power_plot <- ggplot(
 ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multivariate Skewness/Power Evaluation mv Data.pdf",
        plot = Power_plot, width = 10, height = 7)
 
+df_power_noAsym <- df_power |> filter(df_power$Test != "Metric (Asymp)")
+
+
+Power_plot_noAsym <- ggplot(
+  df_power_noAsym,
+  aes(x = alpha_norm,
+      y = Power,
+      color = Test,
+      group = Test,
+      shape = Test)
+) +
+  
+  # ALL SOLID LINES
+  geom_line(linewidth = 1.3) +
+  geom_point(size = 2.8) +
+  
+  # reference line
+  geom_hline(
+    yintercept = 0.05,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.9
+  ) +
+  
+  # SIDE-BY-SIDE
+  facet_wrap(
+    ~ n,
+    nrow = 1,
+    labeller = labeller(n = function(x) paste0("n = ", x))
+  ) +
+  
+  scale_color_manual(values = c(
+    "Mardia (Asymp)" = "#CC79A7",
+    "Mardia (Perm)"  = "#009E73",
+    "Metric (Asymp)" = "#D55E00",
+    "Metric (Perm)"  = "#0072B2",
+    "Wass (Boot+Perm)" = "#D55E00",
+    "Wass (Perm)" = "#E69F00"
+  )) +
+  scale_shape_manual(values = c(
+    "Mardia (Asymp)" = 19,
+    "Mardia (Perm)"  = 17,
+    "Metric (Asymp)" = 18,
+    "Metric (Perm)"  = 15,
+    "Wass (Boot+Perm)"  = 8,
+    "Wass (Perm)"  = 22
+    
+  )) +
+  scale_y_continuous(limits = c(0, 1)) +
+  labs(
+    x = expression("Norm of "* alpha *" (Skewness magnitude)"),
+    y = "Power",
+    color = "Test"
+  ) +
+  theme_bw(base_size = 16) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "plain"),
+    axis.line = element_line(linewidth = 0.5)
+  )
+
+
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multivariate Skewness/Power Evaluation mv Data_V2.pdf",
+       plot = Power_plot_noAsym, width = 10, height = 7)
 
 ###################################################################################
 # --------------------------------------------------------
@@ -786,7 +902,8 @@ level_test_parallel <- function(gen_fun,
                                 B,
                                 alpha,
                                 p,
-                                alpha_skew) {
+                                alpha_skew,
+                                gamma) {
   
   # for reproducibility across forked processes
   RNGkind("L'Ecuyer-CMRG")
@@ -813,7 +930,7 @@ level_test_parallel <- function(gen_fun,
       
       
       c(
-        metric_perm  = perm_test_metric(X, B),
+        metric_perm  = perm_test_metric(X, gamma, B),
         metric_asym  = Asymp_metric_test(X)$p.value,
         mardia_perm  = perm_test_mardia(X, B),
         mardia_asym  = asymp_pvalue_mardia(X),
@@ -867,11 +984,12 @@ set.seed(2121)
 
 ## Parameters 
 sample_sizes <- seq(20,300,20)
-nrep = 5000
-R = 50
-B = 500
-alpha = 0.05
-p = 3
+nrep  <-  5000
+R <- 50
+B  <-  500
+alpha  <-  0.05
+p  <-  3
+gamma <- 1
 
 
 # res <- level_test_parallel(
@@ -893,7 +1011,8 @@ res_az <- level_test_parallel(
   B,
   alpha,
   p,
-  alpha_skew = c(rep(0,p))
+  alpha_skew = c(rep(0,p)),
+  gamma
 )
 
 
@@ -905,7 +1024,8 @@ res_sdb <- level_test_parallel(
   B,
   alpha ,
   p,
-  alpha_skew = matrix(0, nrow = p, ncol = 2)
+  alpha_skew = matrix(0, nrow = p, ncol = 2),
+  gamma
 )
 
 
@@ -993,7 +1113,37 @@ ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multiva
        plot = p_az, width = 10, height = 7)
 
 
+df_az_noAsym <- df_az |>  filter(df_az$Test != "Metric (Asymp)")
 
+p_az_noAsym <- ggplot(df_az_noAsym,
+               aes(x = n, y = Rejection,
+                   color = Test, shape = Test)) +
+  geom_line(linewidth = 1.3, linetype = 'solid') +
+  geom_point(size = 2.5) +
+  geom_hline(yintercept = 0.05,
+             linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("#0072B2", "#009E73",'#CC79A7','#D55E00',"#E69F00", "#56B4E9")) +
+  scale_shape_manual(values = c(19, 17,18,15, 8, 22)) +
+  labs(
+    title = "",
+    x = "Sample Size",
+    y = expression("Rejection Proportion (p < " * alpha * ")")
+  )  +
+  theme_bw(base_size = 16) +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(size = 14),
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "plain"),
+    axis.line = element_line(linewidth = 0.5)
+  ) +
+  ylim(0.0,0.08)
+
+
+ggsave("/Users/vizama/Documents/Papers/2nd paper/Simulation results/pics/Multivariate Skewness/Level Evaluation mv Data_V2.pdf",
+       plot = p_az_noAsym, width = 11, height = 8)
 
 p_sdb <- ggplot(df_sdb,
                 aes(x = n, y = Rejection,
